@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+  <a class="back" href="/">← Все пользователи</a>
+  <h1>🌿 Пользователь #{{ user.telegram_id }}</h1>
+
+  {% macro group_options(selected) %}
+    <option value="" {% if not selected %}selected{% endif %}>Без группы</option>
+    {% for g in groups %}
+      <option value="{{ g.id }}" {% if selected == g.id %}selected{% endif %}>{{ g.name }}</option>
+    {% endfor %}
+  {% endmacro %}
+
+  {% macro plant_item(plant) %}
+    <li>
+      <div>
+        <span class="plant-name">{{ plant.name }}</span>
+        {% if plant.comment %}<div class="plant-comment">{{ plant.comment }}</div>{% endif %}
+      </div>
+      <div class="actions">
+        <details>
+          <summary>Изменить</summary>
+          <form class="edit-form" method="post" action="/plants/{{ plant.id }}/rename">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <input type="text" name="name" value="{{ plant.name }}" required>
+            <input type="text" name="comment" value="{{ plant.comment or '' }}" placeholder="Комментарий">
+            <select name="group_id">{{ group_options(plant.group_id) }}</select>
+            <input type="submit" class="primary" value="Сохранить">
+          </form>
+        </details>
+        <form class="inline" method="post" action="/plants/{{ plant.id }}/delete"
+              onsubmit="return confirm('Удалить «{{ plant.name }}»?');">
+          <input type="hidden" name="user_id" value="{{ user.id }}">
+          <button type="submit" class="danger">Удалить</button>
+        </form>
+      </div>
+    </li>
+  {% endmacro %}
+
+  <div class="card">
+    <form class="add-form" method="post" action="/users/{{ user.id }}/groups" style="border-top:none; padding-top:0; margin-top:0;">
+      <input type="text" name="name" placeholder="Название новой группы" required>
+      <input type="submit" class="primary" value="+ Добавить группу">
+    </form>
+  </div>
+
+  {% for group in groups %}
+    <div class="card">
+      <div class="card-header">
+        <h2>{{ group.name }}</h2>
+        <span class="muted">{{ group.plants|length }} растений</span>
+      </div>
+
+      <details>
+        <summary>Переименовать / удалить группу</summary>
+        <div class="edit-form">
+          <form class="inline" method="post" action="/groups/{{ group.id }}/rename">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <input type="text" name="name" value="{{ group.name }}" required>
+            <input type="submit" class="primary" value="Переименовать">
+          </form>
+          <form class="inline" method="post" action="/groups/{{ group.id }}/delete"
+                onsubmit="return confirm('Удалить группу «{{ group.name }}»? Растения останутся, но станут без группы.');">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <button type="submit" class="danger">Удалить группу</button>
+          </form>
+        </div>
+      </details>
+
+      {% if group.plants %}
+        <ul class="plants">
+          {% for plant in group.plants %}{{ plant_item(plant) }}{% endfor %}
+        </ul>
+      {% else %}
+        <p class="empty">Пока пусто</p>
+      {% endif %}
+
+      <form class="add-form" method="post" action="/users/{{ user.id }}/plants">
+        <input type="hidden" name="group_id" value="{{ group.id }}">
+        <input type="text" name="name" placeholder="Название растения" required>
+        <input type="text" name="comment" placeholder="Комментарий (необязательно)">
+        <input type="submit" class="primary" value="+ Добавить">
+      </form>
+    </div>
+  {% endfor %}
+
+  <div class="card">
+    <div class="card-header">
+      <h2>Без группы</h2>
+      <span class="muted">{{ ungrouped|length }} растений</span>
+    </div>
+
+    {% if ungrouped %}
+      <ul class="plants">
+        {% for plant in ungrouped %}{{ plant_item(plant) }}{% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">Пока пусто</p>
+    {% endif %}
+
+    <form class="add-form" method="post" action="/users/{{ user.id }}/plants">
+      <input type="hidden" name="group_id" value="">
+      <input type="text" name="name" placeholder="Название растения" required>
+      <input type="text" name="comment" placeholder="Комментарий (необязательно)">
+      <input type="submit" class="primary" value="+ Добавить">
+    </form>
+  </div>
+{% endblock %}

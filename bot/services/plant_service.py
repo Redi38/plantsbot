@@ -27,26 +27,29 @@ async def remove_plant(session: AsyncSession, plant: Plant) -> None:
 
 
 async def render_tree(session: AsyncSession, user_id: int) -> str:
-    """Рендерит общий список в виде дерева (как в примере с 🌿)."""
+    """Рендерит общий список по группам без псевдографики —
+    группы разделены пустой строкой, растения — простым маркером."""
     groups, ungrouped = await crud.get_full_tree(session, user_id)
 
     if not groups and not ungrouped:
         return "Пока нет ни одного растения. Добавь первое командой /add 🌱"
 
-    lines = ["🌿 <b>Все растения</b>"]
+    blocks = ["🌿 <b>Все растения</b>"]
 
     for group in groups:
-        lines.append(f"├ <b>{group.name}</b>")
+        block_lines = [f"<b>{group.name}</b>"]
         if not group.plants:
-            lines.append("│   <i>(пусто)</i>")
+            block_lines.append("<i>(пусто)</i>")
         for plant in group.plants:
             suffix = f" — {plant.comment}" if plant.comment else ""
-            lines.append(f"│   ├ {plant.name}{suffix}")
+            block_lines.append(f"• {plant.name}{suffix}")
+        blocks.append("\n".join(block_lines))
 
     if ungrouped:
-        lines.append("└ <b>Без группы</b>")
+        block_lines = ["<b>Без группы</b>"]
         for plant in ungrouped:
             suffix = f" — {plant.comment}" if plant.comment else ""
-            lines.append(f"    ├ {plant.name}{suffix}")
+            block_lines.append(f"• {plant.name}{suffix}")
+        blocks.append("\n".join(block_lines))
 
-    return "\n".join(lines)
+    return "\n\n".join(blocks)

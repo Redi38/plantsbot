@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Учёт растений — админка{% endblock %}</title>
+  <style>
+    :root {
+      --green: #2f6b3f;
+      --green-light: #eaf3ec;
+      --border: #dde3de;
+      --text: #23291f;
+      --muted: #6b756a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7f9f6;
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+    }
+    .wrap { max-width: 780px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 0; }
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; margin-bottom: 16px; font-size: 14px; }
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      margin-bottom: 14px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .muted { color: var(--muted); font-size: 13px; }
+    ul.plants { list-style: none; margin: 8px 0 0; padding: 0; }
+    ul.plants li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 0;
+      border-top: 1px solid var(--border);
+    }
+    ul.plants li:first-child { border-top: none; }
+    .plant-name { font-weight: 500; }
+    .plant-comment { color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    button, input[type=submit] {
+      font: inherit;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 13px;
+    }
+    button.primary, input[type=submit].primary {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+    }
+    button.danger { color: #a33; }
+    button:hover { background: var(--green-light); }
+    button.primary:hover { background: #275834; }
+    form.inline { display: inline; }
+    form.add-form {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+    }
+    input[type=text], select, textarea {
+      font: inherit;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    input[type=text] { flex: 1; min-width: 120px; }
+    details > summary { cursor: pointer; font-size: 13px; color: var(--green); list-style: none; }
+    details > summary::-webkit-details-marker { display: none; }
+    .edit-form { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .empty { color: var(--muted); font-style: italic; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

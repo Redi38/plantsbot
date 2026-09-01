@@ -15,6 +15,16 @@ async def get_or_create_user(session: AsyncSession, telegram_id: int) -> User:
     return user
 
 
+async def list_users(session: AsyncSession) -> list[User]:
+    result = await session.execute(select(User).order_by(User.id))
+    return list(result.scalars())
+
+
+async def get_user(session: AsyncSession, user_id: int) -> User | None:
+    result = await session.execute(select(User).where(User.id == user_id))
+    return result.scalar_one_or_none()
+
+
 # ---------- Группы ----------
 
 async def get_group_by_name(session: AsyncSession, user_id: int, name: str) -> Group | None:
@@ -56,6 +66,15 @@ async def delete_group(session: AsyncSession, group: Group) -> None:
     await session.flush()
 
 
+async def get_group(session: AsyncSession, group_id: int, user_id: int) -> Group | None:
+    result = await session.execute(
+        select(Group)
+        .where(Group.id == group_id, Group.user_id == user_id)
+        .options(selectinload(Group.plants))
+    )
+    return result.scalar_one_or_none()
+
+
 async def list_groups(session: AsyncSession, user_id: int) -> list[Group]:
     result = await session.execute(
         select(Group).where(Group.user_id == user_id).order_by(Group.name)
@@ -87,6 +106,27 @@ async def get_plant(session: AsyncSession, plant_id: int, user_id: int) -> Plant
 
 async def delete_plant(session: AsyncSession, plant: Plant) -> None:
     await session.delete(plant)
+    await session.flush()
+
+
+_UNSET = object()
+
+
+async def update_plant(
+    session: AsyncSession,
+    plant: Plant,
+    name: str | None = None,
+    comment: str | None = _UNSET,  # type: ignore[assignment]
+    group_id: int | None = _UNSET,  # type: ignore[assignment]
+) -> None:
+    """Обновляет поля растения. comment/group_id используют сентинел _UNSET,
+    чтобы отличить "не менять" от "сбросить на None" (например, убрать из группы)."""
+    if name is not None:
+        plant.name = name.strip()
+    if comment is not _UNSET:
+        plant.comment = comment
+    if group_id is not _UNSET:
+        plant.group_id = group_id
     await session.flush()
 
 

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>🌿 Пользователи</h1>
+  <p class="muted">Выбери пользователя, чтобы управлять его растениями и группами.</p>
+
+  {% if not cards %}
+    <p class="empty">Пока никто не писал боту.</p>
+  {% endif %}
+
+  {% for c in cards %}
+    <div class="card">
+      <div class="card-header">
+        <h2><a href="/users/{{ c.user.id }}">Пользователь #{{ c.user.telegram_id }}</a></h2>
+        <span class="muted">{{ c.group_count }} групп · {{ c.plant_count }} растений</span>
+      </div>
+    </div>
+  {% endfor %}
+{% endblock %}
