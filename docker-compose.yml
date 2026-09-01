@@ -1,0 +1,12 @@
+services:
+  plant-bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - plant_bot_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/plants.db
+
+volumes:
+  plant_bot_data:
