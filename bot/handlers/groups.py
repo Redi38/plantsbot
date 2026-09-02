@@ -1,5 +1,5 @@
 from aiogram import F, Router
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -7,6 +7,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import crud
 from bot.db.database import get_session
+from bot.keyboards.reply import BTN_RENAME_GROUP
 from bot.services import group_service
 
 router = Router(name="groups")
@@ -17,7 +18,7 @@ class RenameGroup(StatesGroup):
     new_name = State()
 
 
-@router.message(Command("rename_group"))
+@router.message(F.text == BTN_RENAME_GROUP)
 async def cmd_rename_group(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)

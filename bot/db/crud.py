@@ -18,13 +18,20 @@ async def get_or_create_user(
         session.add(user)
         await session.flush()
     elif username is not None or full_name is not None:
-        # обновляем на случай, если пользователь сменил username/имя в Telegram
         if username is not None:
             user.username = username
         if full_name is not None:
             user.full_name = full_name
         await session.flush()
     return user
+
+
+async def set_ungrouped_label(session: AsyncSession, user: User, label: str | None) -> None:
+    """label=None (или пустая строка после .strip()) сбрасывает подпись
+    обратно на дефолт "Без группы" — сама "группа" при этом не хранится
+    как запись, это просто подпись для растений без group_id."""
+    user.ungrouped_label = label.strip() if label and label.strip() else None
+    await session.flush()
 
 
 async def list_users(session: AsyncSession) -> list[User]:

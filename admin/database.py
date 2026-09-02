@@ -28,6 +28,8 @@ async def _migrate_add_missing_columns(conn) -> None:
         await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN username VARCHAR(64)")
     if "full_name" not in existing_columns:
         await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN full_name VARCHAR(128)")
+    if "ungrouped_label" not in existing_columns:
+        await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN ungrouped_label VARCHAR(100)")
 
 
 @asynccontextmanager

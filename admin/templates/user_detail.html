@@ -3,8 +3,37 @@
   <a class="back" href="/">← Все пользователи</a>
   <h1>🌿 {{ user.display_name }}</h1>
 
+  {% if msg %}
+  <div class="flash flash-ok">✅ {{ msg }}</div>
+  {% endif %}
+  {% if err %}
+  <div class="flash flash-err">⚠️ {{ err }}</div>
+  {% endif %}
+
+  <div class="card" style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">
+    <div style="flex:1; min-width:200px;">
+      <div class="card-header" style="margin-bottom:6px;">
+        <h2>📥 Импорт</h2>
+      </div>
+      <form method="post" action="/users/{{ user.id }}/import" enctype="multipart/form-data">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <label style="font-size:13px; color:var(--muted);">CSV-файл:</label>
+          <input type="file" name="file" accept=".csv,text/csv" style="font-size:13px;">
+          <label style="font-size:13px; color:var(--muted);">или вставь текст (CSV / markdown):</label>
+          <textarea name="text" rows="5" placeholder="Суккуленты:&#10;- Хавортия&#10;- Эхеверия: пересажена в мае&#10;&#10;Или CSV: group,name,comment" style="font-family:monospace; font-size:13px; resize:vertical; padding:6px 8px; border:1px solid var(--border); border-radius:6px;"></textarea>
+          <input type="submit" class="primary" value="Импортировать" style="align-self:flex-start;">
+        </div>
+      </form>
+    </div>
+    <div style="flex:0 0 auto; display:flex; flex-direction:column; gap:8px; padding-top:4px;">
+      <h2 style="font-size:17px; margin:0 0 2px;">📤 Экспорт</h2>
+      <a href="/users/{{ user.id }}/export.csv" class="primary" style="display:inline-block; padding:5px 14px; border-radius:6px; background:var(--green); color:#fff; font-size:13px; font-weight:500; text-decoration:none;">Скачать CSV</a>
+      <p class="muted" style="margin:0;">group,name,comment</p>
+    </div>
+  </div>
+
   {% macro group_options(selected) %}
-    <option value="" {% if not selected %}selected{% endif %}>Без группы</option>
+    <option value="" {% if not selected %}selected{% endif %}>{{ ungrouped_label }}</option>
     {% for g in groups %}
       <option value="{{ g.id }}" {% if selected == g.id %}selected{% endif %}>{{ g.name }}</option>
     {% endfor %}
@@ -85,9 +114,23 @@
 
   <div class="card">
     <div class="card-header">
-      <h2>Без группы</h2>
+      <h2>{{ ungrouped_label }}</h2>
       <span class="muted">{{ ungrouped|length }} растений</span>
     </div>
+
+    <details>
+      <summary>Переименовать подпись</summary>
+      <div class="edit-form">
+        <form class="inline" method="post" action="/users/{{ user.id }}/ungrouped-label">
+          <input type="text" name="label" value="{{ user.ungrouped_label or '' }}" placeholder="Без группы">
+          <input type="submit" class="primary" value="Сохранить">
+        </form>
+        <p class="muted" style="margin:4px 0 0;">
+          Это не настоящая группа — просто подпись для растений без group_id.
+          Пустое поле сбрасывает на дефолт «Без группы».
+        </p>
+      </div>
+    </details>
 
     {% if ungrouped %}
       <ul class="plants">

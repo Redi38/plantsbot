@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from bot.db import crud
 from bot.db.database import get_session
 from bot.keyboards.inline import groups_keyboard, plant_delete_keyboard
+from bot.keyboards.reply import BTN_ADD, BTN_DELETE
 from bot.services import plant_service
 
 router = Router(name="plants")
@@ -21,7 +22,7 @@ class AddPlant(StatesGroup):
 
 # ---------- Добавление ----------
 
-@router.message(Command("add"))
+@router.message(F.text == BTN_ADD)
 async def cmd_add(message: Message, state: FSMContext) -> None:
     await state.set_state(AddPlant.name)
     await message.answer("Как называется растение?")
@@ -33,14 +34,18 @@ async def add_name(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         groups = await crud.list_groups(session, user.id)
+        ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
 
     await state.set_state(AddPlant.group)
     if groups:
-        await message.answer("Выбери группу:", reply_markup=groups_keyboard(groups, prefix="addgroup"))
+        await message.answer(
+            "Выбери группу:",
+            reply_markup=groups_keyboard(groups, prefix="addgroup", none_label=ungrouped_label),
+        )
     else:
         await state.update_data(group_id=None)
         await state.set_state(AddPlant.comment)
-        await message.answer("Групп пока нет — добавлю без группы. Комментарий есть? (или /skip)")
+        await message.answer(f"Групп пока нет — добавлю в «{ungrouped_label}». Комментарий есть? (или /skip)")
 
 
 @router.callback_query(StateFilter(AddPlant.group), F.data.startswith("addgroup:"))
@@ -99,7 +104,7 @@ async def _finalize_add(message: Message, state: FSMContext, comment: str | None
 
 # ---------- Удаление ----------
 
-@router.message(Command("delete"))
+@router.message(F.text == BTN_DELETE)
 async def cmd_delete(message: Message) -> None:
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)

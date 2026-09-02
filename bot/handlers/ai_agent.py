@@ -20,13 +20,13 @@ router = Router(name="ai_agent")
 @router.message(F.text)
 async def handle_free_text(message: Message) -> None:
     if not config.ai_enabled:
-        return  # ИИ отключён — молча игнорируем, чтобы не мешать обычным сообщениям
+        return
 
     try:
         intent = await ai_service.parse_intent(message.text)
     except ai_service.AIServiceUnavailable:
         await message.answer(
-            "Не поняла запрос. Используй /add, /delete или /help, чтобы увидеть команды."
+            "Не поняла запрос. Используй кнопки ➕ Добавить, 🗑 Удалить или ℹ️ Помощь внизу экрана."
         )
         return
 
@@ -56,12 +56,12 @@ async def handle_free_text(message: Message) -> None:
 
         if not matches:
             await message.answer(
-                f"Не нашла растение «{intent['plant_name']}». Проверь /list или удали вручную через /delete"
+                f"Не нашла растение «{intent['plant_name']}». Проверь 📋 Список или удали вручную кнопкой 🗑 Удалить"
             )
             return
         if len(matches) > 1:
             await message.answer(
-                f"Нашла несколько растений с именем «{intent['plant_name']}» — удали вручную через /delete"
+                f"Нашла несколько растений с именем «{intent['plant_name']}» — удали вручную кнопкой 🗑 Удалить"
             )
             return
 
@@ -73,5 +73,5 @@ async def handle_free_text(message: Message) -> None:
         return
 
     await message.answer(
-        "Не совсем поняла, что нужно сделать 🤔 Используй /add, /delete или /help"
+        "Не совсем поняла, что нужно сделать 🤔 Используй кнопки внизу экрана"
     )

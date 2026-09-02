@@ -1,21 +1,25 @@
-from aiogram import Router
-from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import CommandStart
+from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import crud
 from bot.db.database import get_session
+from bot.db.models import Group
+from bot.keyboards.reply import BTN_HELP, BTN_LIST, main_menu_keyboard
 from bot.services import plant_service
-from bot.utils.text import split_long_text
 
 router = Router(name="list_view")
 
 HELP_TEXT = (
     "🌿 <b>Бот для учёта растений</b>\n\n"
-    "/list — общий список всех растений по группам\n"
-    "/add — добавить растение\n"
-    "/delete — удалить растение\n"
-    "/rename_group — переименовать группу\n"
-    "/import — импортировать список (CSV или текст)\n\n"
+    "Пользуйся кнопками внизу экрана 👇\n\n"
+    "📋 Список — список растений по группам\n"
+    "➕ Добавить — добавить растение\n"
+    "🗑 Удалить — удалить растение\n"
+    "✏️ Переименовать группу\n"
+    "📥 Импорт — импортировать список (CSV или текст)\n\n"
     "Также можно просто написать своими словами, например:\n"
     "<i>«добавь алоказию полли, полила вчера»</i> — я пойму 🙂"
 )
@@ -26,19 +30,115 @@ async def cmd_start(message: Message) -> None:
     async with get_session() as session:
         await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         await session.commit()
-    await message.answer(HELP_TEXT)
+    await message.answer(HELP_TEXT, reply_markup=main_menu_keyboard())
 
 
-@router.message(Command("help"))
+@router.message(F.text == BTN_HELP)
 async def cmd_help(message: Message) -> None:
-    await message.answer(HELP_TEXT)
+    await message.answer(HELP_TEXT, reply_markup=main_menu_keyboard())
 
 
-@router.message(Command("list"))
+# ---------- Меню групп (динамическое, по числу групп пользователя) ----------
+
+def _group_menu_keyboard(groups: list[Group], ungrouped_label: str | None):
+    """Строится заново под конкретного пользователя: одна кнопка на группу
+    (id зашит в callback_data, поэтому переименование/дубли названий не мешают)."""
+    builder = InlineKeyboardBuilder()
+    for group in groups:
+        builder.button(text=group.name, callback_data=f"lg:{group.id}")
+    if ungrouped_label:
+        builder.button(text=ungrouped_label, callback_data="lg:none")
+    builder.button(text="📋 Показать всё", callback_data="lg:all")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+async def _group_menu_text_and_kb(user_id: int):
+    async with get_session() as session:
+        groups, ungrouped = await crud.get_full_tree(session, user_id)
+        if not groups and not ungrouped:
+            return "Пока нет ни одного растения. Добавь первое кнопкой ➕ Добавить", None
+        ungrouped_label = await plant_service.get_ungrouped_label(session, user_id) if ungrouped else None
+    return "🌿 Выбери группу:", _group_menu_keyboard(groups, ungrouped_label)
+
+
+@router.message(F.text == BTN_LIST)
 async def cmd_list(message: Message) -> None:
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
-        text = await plant_service.render_tree(session, user.id)
+        await session.commit()
+    text, kb = await _group_menu_text_and_kb(user.id)
+    await message.answer(text, reply_markup=kb)
 
-    for chunk in split_long_text(text):
-        await message.answer(chunk)
+
+@router.callback_query(F.data == "lgmenu")
+async def list_menu_back(callback: CallbackQuery) -> None:
+    async with get_session() as session:
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+        await session.commit()
+    text, kb = await _group_menu_text_and_kb(user.id)
+    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=kb)
+    except TelegramBadRequest:
+        pass
+
+
+# ---------- Просмотр конкретной группы (или "всё") с пагинацией ----------
+
+async def _pages_for(user_id: int, token: str) -> tuple[str, list[str]] | None:
+    async with get_session() as session:
+        if token == "all":
+            return "Все растения", await plant_service.render_pages(session, user_id)
+        if token == "none":
+            return await plant_service.render_group_pages(session, user_id, None)
+        return await plant_service.render_group_pages(session, user_id, int(token))
+
+
+def _group_pages_keyboard(token: str, page: int, total_pages: int):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Группы", callback_data="lgmenu")
+    if total_pages > 1:
+        if page > 1:
+            builder.button(text="◀️", callback_data=f"lgpage:{token}:{page - 1}")
+        builder.button(text=f"{page}/{total_pages}", callback_data="list_noop")
+        if page < total_pages:
+            builder.button(text="▶️", callback_data=f"lgpage:{token}:{page + 1}")
+        builder.adjust(1, 3)
+    else:
+        builder.adjust(1)
+    return builder.as_markup()
+
+
+async def _show_group_page(callback: CallbackQuery, token: str, page: int) -> None:
+    async with get_session() as session:
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+        await session.commit()
+    result = await _pages_for(user.id, token)
+    await callback.answer()
+    if result is None:
+        await callback.message.edit_text("Группа не найдена, возможно уже удалена.")
+        return
+    _, pages = result
+    page = max(1, min(page, len(pages)))
+    try:
+        await callback.message.edit_text(pages[page - 1], reply_markup=_group_pages_keyboard(token, page, len(pages)))
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("lg:"))
+async def list_group_open(callback: CallbackQuery) -> None:
+    token = callback.data.split(":", 1)[1]
+    await _show_group_page(callback, token, 1)
+
+
+@router.callback_query(F.data.startswith("lgpage:"))
+async def list_group_page(callback: CallbackQuery) -> None:
+    _, token, page = callback.data.split(":", 2)
+    await _show_group_page(callback, token, int(page))
+
+
+@router.callback_query(F.data == "list_noop")
+async def list_noop(callback: CallbackQuery) -> None:
+    await callback.answer()

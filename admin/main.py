@@ -1,11 +1,12 @@
-from fastapi import Depends, FastAPI, Form, HTTPException
+from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile, File
 from fastapi.requests import Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 from admin.auth import AuthRequired, create_session_token, require_auth, verify_credentials, SESSION_COOKIE
 from admin.database import get_session, init_db
 from bot.db import crud
+from bot.services import import_service, plant_service
 
 app = FastAPI(title="PlantsBot Dashboard")
 templates = Jinja2Templates(directory="admin/templates")
@@ -82,10 +83,101 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
         if user is None:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         groups, ungrouped = await crud.get_full_tree(session, user.id)
+        ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
+    msg = request.query_params.get("msg")
+    err = request.query_params.get("err")
     return templates.TemplateResponse(
         "user_detail.html",
-        {"request": request, "user": user, "groups": groups, "ungrouped": ungrouped},
+        {
+            "request": request,
+            "user": user,
+            "groups": groups,
+            "ungrouped": ungrouped,
+            "ungrouped_label": ungrouped_label,
+            "msg": msg,
+            "err": err,
+        },
     )
+
+
+@app.get("/users/{user_id}/export.csv")
+async def export_csv(user_id: int, _: str = Depends(require_auth)):
+    """Скачать список растений пользователя в CSV (group,name,comment)."""
+    import io, csv as csv_mod
+    async with get_session() as session:
+        user = await crud.get_user(session, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        groups, ungrouped = await crud.get_full_tree(session, user.id)
+
+    buf = io.StringIO()
+    writer = csv_mod.writer(buf)
+    writer.writerow(["group", "name", "comment"])
+    for group in groups:
+        for plant in group.plants:
+            writer.writerow([group.name, plant.name, plant.comment or ""])
+    for plant in ungrouped:
+        writer.writerow(["", plant.name, plant.comment or ""])
+
+    filename = f"plants_user{user_id}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/users/{user_id}/import")
+async def import_plants(
+    user_id: int,
+    _: str = Depends(require_auth),
+    file: UploadFile | None = File(None),
+    text: str = Form(""),
+):
+    """Импорт CSV или markdown-текста без промежуточного превью.
+    Принимает либо загружённый CSV-файл, либо текст в поле textarea.
+    Растения добавляются к существующим (не заменяют их)."""
+    raw: str | None = None
+
+    if file and file.filename:
+        raw_bytes = await file.read()
+        try:
+            raw = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            raw = raw_bytes.decode("cp1251", errors="replace")
+
+    elif text.strip():
+        raw = text.strip()
+
+    if not raw:
+        return RedirectResponse(f"/users/{user_id}?err=Нет данных для импорта", status_code=303)
+
+    # Пробуем определить формат: CSV если есть заголовок group,name,comment или name,
+    # иначе считаем markdown
+    first_line = raw.splitlines()[0].lower().strip()
+    is_csv = "name" in first_line and ("," in first_line or ";" in first_line)
+
+    try:
+        if is_csv:
+            rows = import_service.parse_csv(raw)
+        else:
+            # для markdown-формата пробуем сначала CSV (вдруг без заголовка не подходит),
+            # fallback на markdown
+            try:
+                rows = import_service.parse_csv(raw)
+            except import_service.ImportParseError:
+                rows = import_service.parse_markdown(raw)
+    except import_service.ImportParseError as exc:
+        return RedirectResponse(f"/users/{user_id}?err={exc}", status_code=303)
+
+    async with get_session() as session:
+        user = await crud.get_user(session, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        preview = await import_service.build_preview(session, user.id, rows)
+        count = await import_service.commit_import(session, user.id, preview)
+
+    return RedirectResponse(f"/users/{user_id}?msg=Импортировано {count} растений", status_code=303)
 
 
 @app.post("/users/{user_id}/groups")
@@ -113,6 +205,20 @@ async def create_plant(
             session, user_id, name, group_id=gid, comment=comment.strip() or None
         )
         await session.commit()
+    return RedirectResponse(f"/users/{user_id}", status_code=303)
+
+
+# ---------- "Без группы" (виртуальная группа, только подпись) ----------
+
+@app.post("/users/{user_id}/ungrouped-label")
+async def set_ungrouped_label(user_id: int, label: str = Form(""), _: str = Depends(require_auth)):
+    """Пустая строка сбрасывает подпись обратно на дефолт "Без группы" —
+    это НЕ создаёт настоящую группу, просто меняет текст в боте."""
+    async with get_session() as session:
+        user = await crud.get_user(session, user_id)
+        if user:
+            await crud.set_ungrouped_label(session, user, label)
+            await session.commit()
     return RedirectResponse(f"/users/{user_id}", status_code=303)
 
 

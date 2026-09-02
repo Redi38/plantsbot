@@ -16,6 +16,7 @@ class User(Base):
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
     full_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     language: Mapped[str] = mapped_column(String(8), default="ru")
+    ungrouped_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     groups: Mapped[list["Group"]] = relationship(back_populates="user", cascade="all, delete-orphan")

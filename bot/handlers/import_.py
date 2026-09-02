@@ -7,13 +7,12 @@ from aiogram.types import CallbackQuery, Message
 from bot.db import crud
 from bot.db.database import get_session
 from bot.keyboards.inline import confirm_keyboard
+from bot.keyboards.reply import BTN_IMPORT
 from bot.services import import_service
 from bot.utils.text import split_long_text
 
 router = Router(name="import_")
 
-# предпросмотры храним в памяти по user_id — на несколько человек этого достаточно,
-# при желании легко перенести в FSM storage
 _pending_imports: dict[int, list[import_service.PreviewGroup]] = {}
 
 
@@ -21,7 +20,7 @@ class ImportFlow(StatesGroup):
     waiting_input = State()
 
 
-@router.message(Command("import"))
+@router.message(F.text == BTN_IMPORT)
 async def cmd_import(message: Message, state: FSMContext) -> None:
     await state.set_state(ImportFlow.waiting_input)
     await message.answer(
@@ -69,8 +68,6 @@ async def _process_import(message: Message, state: FSMContext, raw_text: str, is
     preview_text = import_service.render_preview_text(preview)
     chunks = split_long_text(preview_text)
 
-    # кнопки подтверждения вешаем только на последнее сообщение —
-    # весь текст выше это просто справочная информация
     for chunk in chunks[:-1]:
         await message.answer(chunk)
 
@@ -90,7 +87,7 @@ async def cancel_import_flow(message: Message, state: FSMContext) -> None:
 async def import_confirm(callback: CallbackQuery) -> None:
     preview = _pending_imports.pop(callback.from_user.id, None)
     if preview is None:
-        await callback.answer("Предпросмотр устарел, начни заново через /import", show_alert=True)
+        await callback.answer("Предпросмотр устарел, начни заново кнопкой 📥 Импорт", show_alert=True)
         return
 
     async with get_session() as session:

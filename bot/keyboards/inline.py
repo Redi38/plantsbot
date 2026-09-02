@@ -4,12 +4,14 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db.models import Group
 
 
-def groups_keyboard(groups: list[Group], prefix: str, allow_none: bool = True) -> InlineKeyboardMarkup:
+def groups_keyboard(
+    groups: list[Group], prefix: str, allow_none: bool = True, none_label: str = "Без группы"
+) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for group in groups:
         builder.button(text=group.name, callback_data=f"{prefix}:{group.id}")
     if allow_none:
-        builder.button(text="Без группы", callback_data=f"{prefix}:none")
+        builder.button(text=none_label, callback_data=f"{prefix}:none")
     builder.button(text="➕ Новая группа", callback_data=f"{prefix}:new")
     builder.adjust(1)
     return builder.as_markup()
