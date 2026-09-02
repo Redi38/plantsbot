@@ -3,17 +3,58 @@ from fastapi.requests import Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from admin.auth import require_auth
+from admin.auth import AuthRequired, create_session_token, require_auth, verify_credentials, SESSION_COOKIE
 from admin.database import get_session, init_db
 from bot.db import crud
 
-app = FastAPI(title="Учёт растений — админка")
+app = FastAPI(title="PlantsBot Dashboard")
 templates = Jinja2Templates(directory="admin/templates")
 
 
 @app.on_event("startup")
 async def on_startup() -> None:
     await init_db()
+
+
+@app.exception_handler(AuthRequired)
+async def auth_required_handler(request: Request, exc: AuthRequired) -> RedirectResponse:
+    return RedirectResponse(url=f"/login?next={request.url.path}", status_code=303)
+
+
+# ---------- Вход / выход ----------
+
+@app.get("/login")
+async def login_form(request: Request, next: str = "/"):
+    return templates.TemplateResponse("login.html", {"request": request, "next": next, "error": None})
+
+
+@app.post("/login")
+async def login_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str = Form("/"),
+):
+    if not verify_credentials(username, password):
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "next": next, "error": "Неверный логин или пароль"},
+            status_code=401,
+        )
+
+    token = create_session_token(username)
+    response = RedirectResponse(url=next or "/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, max_age=60 * 60 * 24 * 7, samesite="lax"
+    )
+    return response
+
+
+@app.get("/logout")
+async def logout() -> RedirectResponse:
+    response = RedirectResponse(url="/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
 
 
 # ---------- Пользователи ----------

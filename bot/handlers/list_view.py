@@ -24,7 +24,7 @@ HELP_TEXT = (
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     async with get_session() as session:
-        await crud.get_or_create_user(session, message.from_user.id)
+        await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         await session.commit()
     await message.answer(HELP_TEXT)
 
@@ -37,7 +37,7 @@ async def cmd_help(message: Message) -> None:
 @router.message(Command("list"))
 async def cmd_list(message: Message) -> None:
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         text = await plant_service.render_tree(session, user.id)
 
     for chunk in split_long_text(text):

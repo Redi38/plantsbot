@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
   <a class="back" href="/">← Все пользователи</a>
-  <h1>🌿 Пользователь #{{ user.telegram_id }}</h1>
+  <h1>🌿 {{ user.display_name }}</h1>
 
   {% macro group_options(selected) %}
     <option value="" {% if not selected %}selected{% endif %}>Без группы</option>
@@ -12,7 +12,7 @@
 
   {% macro plant_item(plant) %}
     <li>
-      <div>
+      <div class="plant-name-block">
         <span class="plant-name">{{ plant.name }}</span>
         {% if plant.comment %}<div class="plant-comment">{{ plant.comment }}</div>{% endif %}
       </div>

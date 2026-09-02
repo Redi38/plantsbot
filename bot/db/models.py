@@ -13,11 +13,23 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    full_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     language: Mapped[str] = mapped_column(String(8), default="ru")
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
 
     groups: Mapped[list["Group"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     plants: Mapped[list["Plant"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def display_name(self) -> str:
+        """username в приоритете (как в самом Telegram), иначе full_name,
+        иначе id — если пользователь ни разу не присылал апдейт с этими полями."""
+        if self.username:
+            return f"Пользователь @{self.username}"
+        if self.full_name:
+            return f"Пользователь {self.full_name}"
+        return f"Пользователь #{self.telegram_id}"
 
 
 class Group(Base):

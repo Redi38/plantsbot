@@ -16,6 +16,20 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
         # включаем WAL, чтобы чтение не блокировалось во время записи
         await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        await _migrate_add_missing_columns(conn)
+
+
+async def _migrate_add_missing_columns(conn) -> None:
+    """Лёгкая ручная миграция для SQLite: create_all не добавляет новые колонки
+    в уже существующие таблицы, а Alembic пока не подключён (см. docstring выше).
+    Проверяем через PRAGMA table_info и добавляем недостающее через ALTER TABLE."""
+    result = await conn.exec_driver_sql("PRAGMA table_info(users)")
+    existing_columns = {row[1] for row in result.fetchall()}
+
+    if "username" not in existing_columns:
+        await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN username VARCHAR(64)")
+    if "full_name" not in existing_columns:
+        await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN full_name VARCHAR(128)")
 
 
 @asynccontextmanager

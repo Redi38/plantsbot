@@ -31,7 +31,7 @@ async def cmd_add(message: Message, state: FSMContext) -> None:
 async def add_name(message: Message, state: FSMContext) -> None:
     await state.update_data(name=message.text.strip())
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         groups = await crud.list_groups(session, user.id)
 
     await state.set_state(AddPlant.group)
@@ -65,7 +65,7 @@ async def add_choose_group(callback: CallbackQuery, state: FSMContext) -> None:
 @router.message(StateFilter(AddPlant.new_group_name))
 async def add_new_group_name(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         group, _ = await crud.get_or_create_group(session, user.id, message.text.strip())
         await session.commit()
 
@@ -87,7 +87,7 @@ async def add_comment(message: Message, state: FSMContext) -> None:
 async def _finalize_add(message: Message, state: FSMContext, comment: str | None) -> None:
     data = await state.get_data()
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         plant = await crud.create_plant(
             session, user.id, data["name"], group_id=data.get("group_id"), comment=comment
         )
@@ -102,7 +102,7 @@ async def _finalize_add(message: Message, state: FSMContext, comment: str | None
 @router.message(Command("delete"))
 async def cmd_delete(message: Message) -> None:
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         groups, ungrouped = await crud.get_full_tree(session, user.id)
 
     all_plants = ungrouped[:]
@@ -135,7 +135,7 @@ async def plant_delete_ask(callback: CallbackQuery) -> None:
 async def plant_delete_confirm(callback: CallbackQuery) -> None:
     plant_id = int(callback.data.split(":", 1)[1])
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, callback.from_user.id)
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
         plant = await crud.get_plant(session, plant_id, user.id)
         if plant is None:
             await callback.answer("Уже удалено", show_alert=True)

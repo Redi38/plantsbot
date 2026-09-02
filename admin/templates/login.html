@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход — PlantsBot Dashboard</title>
+  <style>
+    :root {
+      --green: #2f6b3f;
+      --green-light: #eaf3ec;
+      --border: #dde3de;
+      --text: #23291f;
+      --muted: #6b756a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7f9f6;
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      width: 100%;
+      max-width: 340px;
+    }
+    h1 { font-size: 20px; margin: 0 0 20px; text-align: center; }
+    label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; margin-top: 14px; }
+    input[type=text], input[type=password] {
+      width: 100%;
+      font: inherit;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    button {
+      width: 100%;
+      font: inherit;
+      cursor: pointer;
+      border: none;
+      background: var(--green);
+      color: #fff;
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    button:hover { background: #275834; }
+    .error {
+      background: #fdecec;
+      color: #a33;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 13px;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>🌿 PlantsBot Dashboard</h1>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <label for="username">Имя пользователя</label>
+      <input type="text" id="username" name="username" autofocus required>
+      <label for="password">Пароль</label>
+      <input type="password" id="password" name="password" required>
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+      <button type="submit">Войти</button>
+    </form>
+  </div>
+</body>
+</html>

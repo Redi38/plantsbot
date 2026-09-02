@@ -34,7 +34,7 @@ async def handle_free_text(message: Message) -> None:
 
     if action == "add" and intent.get("plant_name"):
         async with get_session() as session:
-            user = await crud.get_or_create_user(session, message.from_user.id)
+            user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
             plant = await plant_service.add_plant(
                 session,
                 user.id,
@@ -48,7 +48,7 @@ async def handle_free_text(message: Message) -> None:
 
     if action == "delete" and intent.get("plant_name"):
         async with get_session() as session:
-            user = await crud.get_or_create_user(session, message.from_user.id)
+            user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
             groups, ungrouped = await crud.get_full_tree(session, user.id)
 
         all_plants = ungrouped[:] + [p for g in groups for p in g.plants]
@@ -66,7 +66,7 @@ async def handle_free_text(message: Message) -> None:
             return
 
         async with get_session() as session:
-            user = await crud.get_or_create_user(session, message.from_user.id)
+            user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
             plant = await crud.get_plant(session, matches[0].id, user.id)
             await plant_service.remove_plant(session, plant)
         await message.answer(f"🗑 Удалила «{matches[0].name}»")

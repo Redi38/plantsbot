@@ -60,7 +60,7 @@ async def _process_import(message: Message, state: FSMContext, raw_text: str, is
         return
 
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         preview = await import_service.build_preview(session, user.id, rows)
 
     _pending_imports[message.from_user.id] = preview
@@ -94,7 +94,7 @@ async def import_confirm(callback: CallbackQuery) -> None:
         return
 
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, callback.from_user.id)
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
         count = await import_service.commit_import(session, user.id, preview)
 
     await callback.answer()

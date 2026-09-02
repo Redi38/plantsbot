@@ -20,7 +20,7 @@ class RenameGroup(StatesGroup):
 @router.message(Command("rename_group"))
 async def cmd_rename_group(message: Message, state: FSMContext) -> None:
     async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id)
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         groups = await crud.list_groups(session, user.id)
 
     if not groups:

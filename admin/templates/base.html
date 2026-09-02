@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Учёт растений — админка{% endblock %}</title>
+  <title>{% block title %}PlantsBot Dashboard{% endblock %}</title>
   <style>
     :root {
       --green: #2f6b3f;
@@ -25,7 +25,7 @@
     h2 { font-size: 17px; margin: 0; }
     a { color: var(--green); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .back { display: inline-block; margin-bottom: 16px; font-size: 14px; }
+    .back { display: inline-block; margin-bottom: 16px; font-size: 15px; font-weight: 500; }
     .card {
       background: #fff;
       border: 1px solid var(--border);
@@ -43,6 +43,7 @@
     ul.plants { list-style: none; margin: 8px 0 0; padding: 0; }
     ul.plants li {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
       gap: 8px;
@@ -50,9 +51,10 @@
       border-top: 1px solid var(--border);
     }
     ul.plants li:first-child { border-top: none; }
-    .plant-name { font-weight: 500; }
-    .plant-comment { color: var(--muted); font-size: 13px; }
-    .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .plant-name-block { flex: 1 1 180px; min-width: 140px; }
+    .plant-name { font-weight: 500; word-break: break-word; }
+    .plant-comment { color: var(--muted); font-size: 13px; word-break: break-word; }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
     button, input[type=submit] {
       font: inherit;
       cursor: pointer;
@@ -86,7 +88,7 @@
       border-radius: 6px;
     }
     input[type=text] { flex: 1; min-width: 120px; }
-    details > summary { cursor: pointer; font-size: 13px; color: var(--green); list-style: none; }
+    details > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--green); list-style: none; }
     details > summary::-webkit-details-marker { display: none; }
     .edit-form { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
     .empty { color: var(--muted); font-style: italic; font-size: 14px; }
@@ -94,6 +96,9 @@
 </head>
 <body>
   <div class="wrap">
+    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <a href="/logout" class="muted" style="font-size:14px; font-weight:500;">Выйти</a>
+    </div>
     {% block content %}{% endblock %}
   </div>
 </body>
