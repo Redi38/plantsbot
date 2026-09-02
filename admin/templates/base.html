@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}PlantsBot Dashboard{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjMwIiBmaWxsPSIjZWFmM2VjIi8+CjxwYXRoIGQ9Ik0zMiA0NyBMMzIgMjciIHN0cm9rZT0iIzJmNmIzZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbGw9Im5vbmUiLz4KPHBhdGggZD0iTTMyIDMxYy0xMS0xLTE2LTExLTEyLTIwIDExIDEgMTYgMTEgMTIgMjB6IiBmaWxsPSIjMmY2YjNmIi8+CjxwYXRoIGQ9Ik0zMiAyN2MxMS0xIDE2LTExIDEyLTIwLTExIDEtMTYgMTEtMTIgMjB6IiBmaWxsPSIjM2Y4YTUyIi8+Cjwvc3ZnPg==">
   <style>
     :root {
       --green: #2f6b3f;
@@ -20,7 +21,7 @@
       margin: 0;
       padding: 24px;
     }
-    .wrap { max-width: 780px; margin: 0 auto; }
+    .wrap { max-width: 1180px; margin: 0 auto; }
     h1 { font-size: 22px; margin: 0 0 4px; }
     h2 { font-size: 17px; margin: 0; }
     a { color: var(--green); text-decoration: none; }
@@ -42,19 +43,41 @@
     .muted { color: var(--muted); font-size: 13px; }
     ul.plants { list-style: none; margin: 8px 0 0; padding: 0; }
     ul.plants li {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: start;
+      column-gap: 10px;
+      row-gap: 8px;
       padding: 7px 0;
       border-top: 1px solid var(--border);
     }
     ul.plants li:first-child { border-top: none; }
-    .plant-name-block { flex: 1 1 180px; min-width: 140px; }
+    .plant-name-block { grid-column: 1; grid-row: 1; min-width: 0; }
     .plant-name { font-weight: 500; word-break: break-word; }
     .plant-comment { color: var(--muted); font-size: 13px; word-break: break-word; }
-    .actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+    /* .actions and the plant-level <details> are "flattened" via display:contents so
+       "Изменить" and "Удалить" stay pinned to row 1 no matter whether the edit form
+       (row 2, full width) is open or closed. */
+    .actions { display: contents; }
+    .actions > details { display: contents; }
+    .actions > details > summary {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+      white-space: nowrap;
+    }
+    .actions > form.inline {
+      grid-column: 3;
+      grid-row: 1;
+      justify-self: end;
+    }
+    @media (max-width: 460px) {
+      ul.plants li { grid-template-columns: 1fr auto; }
+      .plant-name-block { grid-column: 1 / -1; }
+      .actions > details > summary { grid-column: 1; grid-row: 2; justify-self: start; }
+      .actions > form.inline { grid-column: 2; grid-row: 2; }
+      .edit-form { grid-row: 3; }
+    }
     button, input[type=submit] {
       font: inherit;
       cursor: pointer;
@@ -86,11 +109,24 @@
       padding: 6px 8px;
       border: 1px solid var(--border);
       border-radius: 6px;
+      min-width: 0;
+      max-width: 100%;
     }
-    input[type=text] { flex: 1; min-width: 120px; }
+    input[type=text] { flex: 1 1 120px; min-width: 90px; }
+    .edit-form input[name="name"] { flex: 2 1 220px; }
+    .edit-form input[name="comment"] { flex: 1 1 90px; min-width: 70px; }
     details > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--green); list-style: none; }
     details > summary::-webkit-details-marker { display: none; }
-    .edit-form { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .edit-form {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      width: 100%;
+      box-sizing: border-box;
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
     .empty { color: var(--muted); font-style: italic; font-size: 14px; }
   </style>
 </head>
