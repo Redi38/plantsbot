@@ -48,7 +48,7 @@ def _group_menu_keyboard(groups: list[Group], ungrouped_label: str | None):
         builder.button(text=group.name, callback_data=f"lg:{group.id}")
     if ungrouped_label:
         builder.button(text=ungrouped_label, callback_data="lg:none")
-    builder.button(text="📋 Показать всё", callback_data="lg:all")
+    builder.button(text="📋 Показать всё", callback_data="lg:all", style="primary")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -86,7 +86,7 @@ async def list_menu_back(callback: CallbackQuery) -> None:
 
 # ---------- Просмотр конкретной группы (или "всё") с пагинацией ----------
 
-async def _pages_for(user_id: int, token: str) -> tuple[str, list[str]] | None:
+async def pages_for(user_id: int, token: str) -> tuple[str, list[str]] | None:
     async with get_session() as session:
         if token == "all":
             return "Все растения", await plant_service.render_pages(session, user_id)
@@ -95,26 +95,35 @@ async def _pages_for(user_id: int, token: str) -> tuple[str, list[str]] | None:
         return await plant_service.render_group_pages(session, user_id, int(token))
 
 
-def _group_pages_keyboard(token: str, page: int, total_pages: int):
+def group_pages_keyboard(token: str, page: int, total_pages: int):
     builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Группы", callback_data="lgmenu")
+    builder.button(text="⬅️ Назад", callback_data="lgmenu", style="primary")
+
+    pagination_row_size = 0
     if total_pages > 1:
         if page > 1:
-            builder.button(text="◀️", callback_data=f"lgpage:{token}:{page - 1}")
-        builder.button(text=f"{page}/{total_pages}", callback_data="list_noop")
+            builder.button(text="◀️", callback_data=f"lgpage:{token}:{page - 1}", style="primary")
+            pagination_row_size += 1
+        builder.button(text=f"{page}/{total_pages}", callback_data="list_noop", style="primary")
+        pagination_row_size += 1
         if page < total_pages:
-            builder.button(text="▶️", callback_data=f"lgpage:{token}:{page + 1}")
-        builder.adjust(1, 3)
-    else:
-        builder.adjust(1)
+            builder.button(text="▶️", callback_data=f"lgpage:{token}:{page + 1}", style="primary")
+            pagination_row_size += 1
+
+    builder.button(text="➕ Добавить", callback_data=f"lgadd:{token}", style="success")
+    builder.button(text="✏️ Изменить", callback_data=f"lgedit:{token}", style="primary")
+    builder.button(text="🗑 Удалить", callback_data=f"lgdel:{token}", style="danger")
+
+    row_sizes = [1] + ([pagination_row_size] if pagination_row_size else []) + [3]
+    builder.adjust(*row_sizes)
     return builder.as_markup()
 
 
-async def _show_group_page(callback: CallbackQuery, token: str, page: int) -> None:
+async def show_group_page(callback: CallbackQuery, token: str, page: int) -> None:
     async with get_session() as session:
         user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
         await session.commit()
-    result = await _pages_for(user.id, token)
+    result = await pages_for(user.id, token)
     await callback.answer()
     if result is None:
         await callback.message.edit_text("Группа не найдена, возможно уже удалена.")
@@ -122,21 +131,30 @@ async def _show_group_page(callback: CallbackQuery, token: str, page: int) -> No
     _, pages = result
     page = max(1, min(page, len(pages)))
     try:
-        await callback.message.edit_text(pages[page - 1], reply_markup=_group_pages_keyboard(token, page, len(pages)))
+        await callback.message.edit_text(pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages)))
     except TelegramBadRequest:
         pass
+
+
+async def send_group_page(message: Message, user_id: int, token: str, page: int = 1) -> None:
+    result = await pages_for(user_id, token)
+    if result is None:
+        return
+    _, pages = result
+    page = max(1, min(page, len(pages)))
+    await message.answer(pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages)))
 
 
 @router.callback_query(F.data.startswith("lg:"))
 async def list_group_open(callback: CallbackQuery) -> None:
     token = callback.data.split(":", 1)[1]
-    await _show_group_page(callback, token, 1)
+    await show_group_page(callback, token, 1)
 
 
 @router.callback_query(F.data.startswith("lgpage:"))
 async def list_group_page(callback: CallbackQuery) -> None:
     _, token, page = callback.data.split(":", 2)
-    await _show_group_page(callback, token, int(page))
+    await show_group_page(callback, token, int(page))
 
 
 @router.callback_query(F.data == "list_noop")

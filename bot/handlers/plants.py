@@ -3,9 +3,11 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import crud
 from bot.db.database import get_session
+from bot.handlers.list_view import send_group_page, show_group_page
 from bot.keyboards.inline import groups_keyboard, plant_delete_keyboard
 from bot.keyboards.reply import BTN_ADD, BTN_DELETE
 from bot.services import plant_service
@@ -20,17 +22,62 @@ class AddPlant(StatesGroup):
     comment = State()
 
 
+class EditPlant(StatesGroup):
+    value = State()
+
+
+async def _plants_for_token(session, user_id: int, token: str) -> list:
+    """Список растений, отображаемых в конкретном списке (группа / без
+    группы / всё) — используется для меню выбора растения в изменении и
+    удалении, вызванных из этого списка."""
+    if token == "all":
+        groups, ungrouped = await crud.get_full_tree(session, user_id)
+        plants = list(ungrouped)
+        for g in groups:
+            plants.extend(g.plants)
+        return plants
+    if token == "none":
+        _, ungrouped = await crud.get_full_tree(session, user_id)
+        return list(ungrouped)
+    group = await crud.get_group(session, int(token), user_id)
+    return list(group.plants) if group else []
+
+
 # ---------- Добавление ----------
 
 @router.message(F.text == BTN_ADD)
 async def cmd_add(message: Message, state: FSMContext) -> None:
+    await state.clear()
     await state.set_state(AddPlant.name)
     await message.answer("Как называется растение?")
+
+
+@router.callback_query(F.data.startswith("lgadd:"))
+async def lgadd_start(callback: CallbackQuery, state: FSMContext) -> None:
+    """Добавление растения прямо из просмотра конкретного списка — группа
+    берётся из токена этого списка (кроме "all", где группу всё равно
+    нужно выбрать), а после добавления бот возвращается на этот же список."""
+    token = callback.data.split(":", 1)[1]
+    await callback.answer()
+    await state.clear()
+    await state.update_data(return_token=token)
+    if token != "all":
+        await state.update_data(preset_group_id=None if token == "none" else int(token))
+    await state.set_state(AddPlant.name)
+    await callback.message.answer("Как называется растение?")
 
 
 @router.message(StateFilter(AddPlant.name))
 async def add_name(message: Message, state: FSMContext) -> None:
     await state.update_data(name=message.text.strip())
+    data = await state.get_data()
+
+    if "preset_group_id" in data:
+        await state.update_data(group_id=data["preset_group_id"])
+        await state.set_state(AddPlant.comment)
+        await message.answer("Комментарий есть? Напиши текстом или пришли /skip")
+        return
+
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         groups = await crud.list_groups(session, user.id)
@@ -97,9 +144,11 @@ async def _finalize_add(message: Message, state: FSMContext, comment: str | None
             session, user.id, data["name"], group_id=data.get("group_id"), comment=comment
         )
         await session.commit()
-
-    await state.clear()
-    await message.answer(f"🌱 Добавила «{plant.name}»")
+        return_token = data.get("return_token")
+        await state.clear()
+        await message.answer(f"🌱 Добавила «{plant.name}»")
+        if return_token:
+            await send_group_page(message, user.id, return_token)
 
 
 # ---------- Удаление ----------
@@ -156,3 +205,131 @@ async def plant_delete_confirm(callback: CallbackQuery) -> None:
 async def cancel_callback(callback: CallbackQuery) -> None:
     await callback.answer("Отменено")
     await callback.message.edit_text("Отменено")
+
+
+# ---------- Удаление растения из конкретного списка ----------
+
+@router.callback_query(F.data.startswith("lgdel:"))
+async def lgdel_pick(callback: CallbackQuery) -> None:
+    token = callback.data.split(":", 1)[1]
+    async with get_session() as session:
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+        await session.commit()
+        plants = await _plants_for_token(session, user.id, token)
+
+    await callback.answer()
+    if not plants:
+        await callback.answer("В этом списке пока нет растений", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    for plant in plants:
+        builder.button(text=plant.name, callback_data=f"lgpdel:{token}:{plant.id}")
+    builder.button(text="Отмена", callback_data=f"lg:{token}")
+    builder.adjust(1)
+    await callback.message.edit_text("Какое растение удалить?", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data.startswith("lgpdel:"))
+async def lgpdel_confirm_ask(callback: CallbackQuery) -> None:
+    _, token, plant_id = callback.data.split(":", 2)
+    await callback.answer()
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🗑 Удалить", callback_data=f"lgpdelc:{token}:{plant_id}")
+    builder.button(text="Отмена", callback_data=f"lg:{token}")
+    builder.adjust(2)
+    await callback.message.edit_text("Точно удалить это растение?", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data.startswith("lgpdelc:"))
+async def lgpdel_confirm(callback: CallbackQuery) -> None:
+    _, token, plant_id = callback.data.split(":", 2)
+    async with get_session() as session:
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+        plant = await crud.get_plant(session, int(plant_id), user.id)
+        if plant is None:
+            await callback.answer("Уже удалено", show_alert=True)
+            return
+        await plant_service.remove_plant(session, plant)
+
+    await callback.answer("Удалено")
+    await show_group_page(callback, token, 1)
+
+
+# ---------- Изменение растения из конкретного списка ----------
+
+@router.callback_query(F.data.startswith("lgedit:"))
+async def lgedit_pick(callback: CallbackQuery) -> None:
+    token = callback.data.split(":", 1)[1]
+    async with get_session() as session:
+        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
+        await session.commit()
+        plants = await _plants_for_token(session, user.id, token)
+
+    await callback.answer()
+    if not plants:
+        await callback.answer("В этом списке пока нет растений", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    for plant in plants:
+        builder.button(text=plant.name, callback_data=f"lgpedit:{token}:{plant.id}")
+    builder.button(text="Отмена", callback_data=f"lg:{token}")
+    builder.adjust(1)
+    await callback.message.edit_text("Какое растение изменить?", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data.startswith("lgpedit:"))
+async def lgpedit_field(callback: CallbackQuery) -> None:
+    _, token, plant_id = callback.data.split(":", 2)
+    await callback.answer()
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Название", callback_data=f"lgpeditf:{token}:{plant_id}:name")
+    builder.button(text="Комментарий", callback_data=f"lgpeditf:{token}:{plant_id}:comment")
+    builder.button(text="Отмена", callback_data=f"lg:{token}")
+    builder.adjust(2, 1)
+    await callback.message.edit_text("Что изменить?", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data.startswith("lgpeditf:"))
+async def lgpeditf_ask_value(callback: CallbackQuery, state: FSMContext) -> None:
+    _, token, plant_id, field = callback.data.split(":", 3)
+    await callback.answer()
+    await state.clear()
+    await state.update_data(token=token, plant_id=int(plant_id), field=field)
+    await state.set_state(EditPlant.value)
+    prompt = "Новое название:" if field == "name" else "Новый комментарий (или /skip, чтобы убрать):"
+    await callback.message.answer(prompt)
+
+
+@router.message(Command("skip"), StateFilter(EditPlant.value))
+async def edit_skip_value(message: Message, state: FSMContext) -> None:
+    await _finalize_edit(message, state, value=None)
+
+
+@router.message(StateFilter(EditPlant.value))
+async def edit_value(message: Message, state: FSMContext) -> None:
+    await _finalize_edit(message, state, value=message.text.strip())
+
+
+async def _finalize_edit(message: Message, state: FSMContext, value: str | None) -> None:
+    data = await state.get_data()
+    field = data["field"]
+    async with get_session() as session:
+        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
+        plant = await crud.get_plant(session, data["plant_id"], user.id)
+        if plant is None:
+            await state.clear()
+            await message.answer("Растение уже удалено.")
+            return
+
+        if field == "name" and value:
+            await crud.update_plant(session, plant, name=value)
+        elif field == "comment":
+            await crud.update_plant(session, plant, comment=value)
+        await session.commit()
+
+    token = data["token"]
+    await state.clear()
+    await message.answer("✏️ Изменено")
+    await send_group_page(message, user.id, token)
