@@ -8,6 +8,7 @@ from bot.db import crud
 from bot.db.database import get_session
 from bot.keyboards.inline import confirm_keyboard
 from bot.services import import_service
+from bot.utils.text import split_long_text
 
 router = Router(name="import_")
 
@@ -65,8 +66,16 @@ async def _process_import(message: Message, state: FSMContext, raw_text: str, is
     _pending_imports[message.from_user.id] = preview
     await state.clear()
 
+    preview_text = import_service.render_preview_text(preview)
+    chunks = split_long_text(preview_text)
+
+    # кнопки подтверждения вешаем только на последнее сообщение —
+    # весь текст выше это просто справочная информация
+    for chunk in chunks[:-1]:
+        await message.answer(chunk)
+
     await message.answer(
-        import_service.render_preview_text(preview),
+        chunks[-1],
         reply_markup=confirm_keyboard(yes_data="import_confirm", no_data="import_cancel"),
     )
 

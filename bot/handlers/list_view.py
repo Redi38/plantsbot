@@ -5,6 +5,7 @@ from aiogram.types import Message
 from bot.db import crud
 from bot.db.database import get_session
 from bot.services import plant_service
+from bot.utils.text import split_long_text
 
 router = Router(name="list_view")
 
@@ -38,4 +39,6 @@ async def cmd_list(message: Message) -> None:
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id)
         text = await plant_service.render_tree(session, user.id)
-    await message.answer(text)
+
+    for chunk in split_long_text(text):
+        await message.answer(chunk)
