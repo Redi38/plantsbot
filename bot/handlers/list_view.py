@@ -28,9 +28,6 @@ HELP_TEXT = (
 
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
-    async with get_session() as session:
-        await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
-        await session.commit()
     await message.answer(HELP_TEXT, reply_markup=main_menu_keyboard())
 
 
@@ -64,30 +61,20 @@ async def _group_menu_text_and_kb(user_id: int):
 
 
 @router.message(F.text == BTN_LIST)
-async def cmd_list(message: Message, state: FSMContext) -> None:
-    # Кнопка "Список" доступна в любой момент, в том числе посреди
-    # сценария добавления/редактирования — прерываем его и сразу
-    # удаляем зависшую подсказку (иначе следующий запуск add-сценария
-    # из другого места её не найдёт и не удалит).
+async def cmd_list(message: Message, state: FSMContext, user_id: int) -> None:
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
         except TelegramBadRequest:
             pass
-    async with get_session() as session:
-        user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
-        await session.commit()
-    text, kb = await _group_menu_text_and_kb(user.id)
+    text, kb = await _group_menu_text_and_kb(user_id)
     await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "lgmenu")
-async def list_menu_back(callback: CallbackQuery) -> None:
-    async with get_session() as session:
-        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
-        await session.commit()
-    text, kb = await _group_menu_text_and_kb(user.id)
+async def list_menu_back(callback: CallbackQuery, user_id: int) -> None:
+    text, kb = await _group_menu_text_and_kb(user_id)
     await callback.answer()
     try:
         await callback.message.edit_text(text, reply_markup=kb)
@@ -137,15 +124,11 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
     is_real_group = token not in ("all", "none")
 
     if token == "all":
-        # row1: crud buttons, row2: pagination (if any), row3: back
         add_crud()
         add_pagination()
         add_back()
         row_sizes = [3] + ([pagination_row_size] if pagination_row_size else []) + [1]
     else:
-        # Назад всегда на последнем ряду:
-        # - если есть пагинация: row1 = пагинация, row2 = crud, [row3 = переименовать группу], row(посл.) = назад
-        # - если пагинации нет: row1 = crud, [row2 = переименовать группу], row(посл.) = назад
         if total_pages > 1:
             add_pagination()
             add_crud()
@@ -165,14 +148,11 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
     return builder.as_markup()
 
 
-async def show_group_page(callback: CallbackQuery, token: str, page: int) -> None:
-    async with get_session() as session:
-        user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
-        await session.commit()
-    result = await pages_for(user.id, token)
+async def show_group_page(callback: CallbackQuery, user_id: int, token: str, page: int) -> None:
+    result = await pages_for(user_id, token)
     await callback.answer()
     if result is None:
-        await callback.message.edit_text("Группа не найдена, возможно уже удалена.")
+        await callback.message.edit_text("⚠️ Группа не найдена, возможно уже удалена.")
         return
     _, pages = result
     page = max(1, min(page, len(pages)))
@@ -210,15 +190,15 @@ async def send_group_page(
 
 
 @router.callback_query(F.data.startswith("lg:"))
-async def list_group_open(callback: CallbackQuery) -> None:
+async def list_group_open(callback: CallbackQuery, user_id: int) -> None:
     token = callback.data.split(":", 1)[1]
-    await show_group_page(callback, token, 1)
+    await show_group_page(callback, user_id, token, 1)
 
 
 @router.callback_query(F.data.startswith("lgpage:"))
-async def list_group_page(callback: CallbackQuery) -> None:
+async def list_group_page(callback: CallbackQuery, user_id: int) -> None:
     _, token, page = callback.data.split(":", 2)
-    await show_group_page(callback, token, int(page))
+    await show_group_page(callback, user_id, token, int(page))
 
 
 @router.callback_query(F.data == "list_noop")

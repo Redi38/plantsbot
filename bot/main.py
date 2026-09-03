@@ -9,6 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.config import config
 from bot.db.database import init_db
 from bot.handlers import ai_agent, groups, import_, list_view, plants
+from bot.middlewares.user import UserMiddleware
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,6 +19,10 @@ async def main() -> None:
 
     bot = Bot(token=config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = Dispatcher(storage=MemoryStorage())
+
+    # резолвит/создаёт пользователя БД для каждого апдейта и подставляет
+    # user_id в хендлеры — до роутеров, поэтому применяется ко всем
+    dp.update.outer_middleware(UserMiddleware())
 
     # порядок важен: конкретные команды/FSM-сценарии — раньше,
     # свободный ИИ-агент — последним, чтобы не перехватывать чужие сообщения

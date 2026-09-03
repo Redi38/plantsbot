@@ -168,23 +168,21 @@ def render_preview_text(preview: list[PreviewGroup]) -> str:
 
 async def commit_import(session: AsyncSession, user_id: int, preview: list[PreviewGroup]) -> tuple[int, int]:
     """Сохраняет предпросмотренный импорт в БД. Возвращает (добавлено, пропущено_как_дубли)."""
-    from bot.db import crud as _crud
-
     count = 0
     skipped = 0
     seen: set[tuple[int | None, str]] = set()
     for pg in preview:
         group_id = None
         if pg.name != "Без группы":
-            group, _ = await _crud.get_or_create_group(session, user_id, pg.name)
+            group, _ = await crud.get_or_create_group(session, user_id, pg.name)
             group_id = group.id
         for row in pg.plants:
             key = (group_id, row.plant_name.strip().lower())
-            if key in seen or await _crud.find_plant_by_name(session, user_id, row.plant_name, group_id):
+            if key in seen or await crud.find_plant_by_name(session, user_id, row.plant_name, group_id):
                 skipped += 1
                 continue
             seen.add(key)
-            await _crud.create_plant(
+            await crud.create_plant(
                 session, user_id, row.plant_name, group_id=group_id, comment=row.comment
             )
             count += 1

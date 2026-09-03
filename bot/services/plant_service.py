@@ -50,10 +50,6 @@ async def get_ungrouped_label(session: AsyncSession, user_id: int) -> str:
     return (user.ungrouped_label if user and user.ungrouped_label else None) or _DEFAULT_UNGROUPED_LABEL
 
 
-# короткий алиас для внутреннего использования в этом модуле
-_ungrouped_label = get_ungrouped_label
-
-
 def _render_group_block(name: str, plants: list[Plant]) -> str:
     lines = [f"<b>{name} ({len(plants)})</b>"]
     if not plants:
@@ -72,7 +68,7 @@ async def render_group_pages(
     найдена / принадлежит другому пользователю."""
     if group_id is None:
         _, ungrouped = await crud.get_full_tree(session, user_id)
-        name, plants = await _ungrouped_label(session, user_id), ungrouped
+        name, plants = await get_ungrouped_label(session, user_id), ungrouped
     else:
         group = await crud.get_group(session, group_id, user_id)
         if group is None:
@@ -95,7 +91,7 @@ async def render_pages(session: AsyncSession, user_id: int) -> list[str]:
 
     blocks: list[tuple[str, list[Plant]]] = [(group.name, group.plants) for group in groups]
     if ungrouped:
-        blocks.append((await _ungrouped_label(session, user_id), ungrouped))
+        blocks.append((await get_ungrouped_label(session, user_id), ungrouped))
 
     total = sum(len(plants) for _, plants in blocks)
     list_header = f"🌿 <b>Все растения ({total})</b>"
