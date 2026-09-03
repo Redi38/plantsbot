@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI, Form, HTTPException, UploadFile, File
 from fastapi.requests import Request
 from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from admin.auth import AuthRequired, create_session_token, require_auth, verify_credentials, SESSION_COOKIE
@@ -9,7 +10,20 @@ from bot.db import crud
 from bot.services import import_service, plant_service
 
 app = FastAPI(title="PlantsBot Dashboard")
+app.mount("/static", StaticFiles(directory="admin/static"), name="static")
 templates = Jinja2Templates(directory="admin/templates")
+
+
+def _group_anchor(group_id: int | None) -> str:
+    """id секции на странице пользователя, к которой относится группа —
+    используется, чтобы после удаления/переименования/добавления вернуть
+    админа туда же, а не наверх страницы."""
+    return f"group-{group_id}" if group_id is not None else "ungrouped"
+
+
+def _user_redirect(user_id: int, anchor: str | None = None) -> RedirectResponse:
+    url = f"/users/{user_id}#{anchor}" if anchor else f"/users/{user_id}"
+    return RedirectResponse(url, status_code=303)
 
 
 @app.on_event("startup")
@@ -197,11 +211,13 @@ async def import_plants(
 
 @app.post("/users/{user_id}/groups")
 async def create_group(user_id: int, name: str = Form(...), _: str = Depends(require_auth)):
+    anchor = "groups"
     if name.strip():
         async with get_session() as session:
-            await crud.create_group(session, user_id, name)
+            group = await crud.create_group(session, user_id, name)
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+            anchor = _group_anchor(group.id)
+    return _user_redirect(user_id, anchor)
 
 
 @app.post("/users/{user_id}/plants")
@@ -212,15 +228,15 @@ async def create_plant(
     group_id: str = Form(""),
     _: str = Depends(require_auth),
 ):
+    gid = int(group_id) if group_id else None
     if not name.strip():
-        return RedirectResponse(f"/users/{user_id}", status_code=303)
+        return _user_redirect(user_id, _group_anchor(gid))
     async with get_session() as session:
-        gid = int(group_id) if group_id else None
         await crud.create_plant(
             session, user_id, name, group_id=gid, comment=comment.strip() or None
         )
         await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    return _user_redirect(user_id, _group_anchor(gid))
 
 
 # ---------- "Без группы" (виртуальная группа, только подпись) ----------
@@ -234,7 +250,7 @@ async def set_ungrouped_label(user_id: int, label: str = Form(""), _: str = Depe
         if user:
             await crud.set_ungrouped_label(session, user, label)
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    return _user_redirect(user_id, "ungrouped")
 
 
 # ---------- Группы ----------
@@ -248,7 +264,7 @@ async def rename_group(
         if group and name.strip():
             await crud.rename_group(session, group, name)
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    return _user_redirect(user_id, _group_anchor(group_id))
 
 
 @app.post("/groups/{group_id}/delete")
@@ -258,7 +274,9 @@ async def delete_group(group_id: int, user_id: int = Form(...), _: str = Depends
         if group:
             await crud.delete_group(session, group)
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    # группы больше нет, но её растения переехали в "без группы" —
+    # логично показать именно этот раздел, а не верх страницы
+    return _user_redirect(user_id, "ungrouped")
 
 
 @app.post("/groups/{group_id}/delete-with-plants")
@@ -270,7 +288,7 @@ async def delete_group_with_plants(group_id: int, user_id: int = Form(...), _: s
         if group:
             await crud.delete_group_with_plants(session, group)
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    return _user_redirect(user_id, "groups")
 
 
 # ---------- Растения ----------
@@ -284,22 +302,24 @@ async def rename_plant(
     group_id: str = Form(""),
     _: str = Depends(require_auth),
 ):
+    gid = int(group_id) if group_id else None
     async with get_session() as session:
         plant = await crud.get_plant(session, plant_id, user_id)
         if plant and name.strip():
-            gid = int(group_id) if group_id else None
             await crud.update_plant(
                 session, plant, name=name, comment=comment.strip() or None, group_id=gid
             )
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    # растение могло переехать в другую группу — якорим на новую, не старую
+    return _user_redirect(user_id, _group_anchor(gid))
 
 
 @app.post("/plants/{plant_id}/delete")
 async def delete_plant(plant_id: int, user_id: int = Form(...), _: str = Depends(require_auth)):
     async with get_session() as session:
         plant = await crud.get_plant(session, plant_id, user_id)
+        anchor = _group_anchor(plant.group_id) if plant else None
         if plant:
             await crud.delete_plant(session, plant)
             await session.commit()
-    return RedirectResponse(f"/users/{user_id}", status_code=303)
+    return _user_redirect(user_id, anchor)

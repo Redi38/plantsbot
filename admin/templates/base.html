@@ -5,146 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}PlantsBot Dashboard{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjMwIiBmaWxsPSIjZWFmM2VjIi8+CjxwYXRoIGQ9Ik0zMiA0NyBMMzIgMjciIHN0cm9rZT0iIzJmNmIzZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbGw9Im5vbmUiLz4KPHBhdGggZD0iTTMyIDMxYy0xMS0xLTE2LTExLTEyLTIwIDExIDEgMTYgMTEgMTIgMjB6IiBmaWxsPSIjMmY2YjNmIi8+CjxwYXRoIGQ9Ik0zMiAyN2MxMS0xIDE2LTExIDEyLTIwLTExIDEtMTYgMTEtMTIgMjB6IiBmaWxsPSIjM2Y4YTUyIi8+Cjwvc3ZnPg==">
-  <style>
-    :root {
-      --green: #2f6b3f;
-      --green-light: #eaf3ec;
-      --border: #dde3de;
-      --text: #23291f;
-      --muted: #6b756a;
-    }
-    * { box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f7f9f6;
-      color: var(--text);
-      margin: 0;
-      padding: 24px;
-    }
-    .wrap { max-width: 1180px; margin: 0 auto; }
-    h1 { font-size: 22px; margin: 0 0 4px; }
-    h2 { font-size: 17px; margin: 0; }
-    a { color: var(--green); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .back { display: inline-block; margin-bottom: 16px; font-size: 15px; font-weight: 500; }
-    .card {
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px 18px;
-      margin-bottom: 14px;
-    }
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .muted { color: var(--muted); font-size: 13px; }
-    ul.plants { list-style: none; margin: 8px 0 0; padding: 0; }
-    ul.plants li {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      align-items: start;
-      column-gap: 10px;
-      row-gap: 8px;
-      padding: 7px 0;
-      border-top: 1px solid var(--border);
-    }
-    ul.plants li:first-child { border-top: none; }
-    .plant-name-block { grid-column: 1; grid-row: 1; min-width: 0; }
-    .plant-name { font-weight: 500; word-break: break-word; }
-    .plant-comment { color: var(--muted); font-size: 13px; word-break: break-word; }
-    /* .actions and the plant-level <details> are "flattened" via display:contents so
-       "Изменить" and "Удалить" stay pinned to row 1 no matter whether the edit form
-       (row 2, full width) is open or closed. */
-    .actions { display: contents; }
-    .actions > details { display: contents; }
-    .actions > details > summary {
-      grid-column: 2;
-      grid-row: 1;
-      justify-self: end;
-      white-space: nowrap;
-    }
-    .actions > form.inline {
-      grid-column: 3;
-      grid-row: 1;
-      justify-self: end;
-    }
-    @media (max-width: 460px) {
-      ul.plants li { grid-template-columns: 1fr auto; }
-      .plant-name-block { grid-column: 1 / -1; }
-      .actions > details > summary { grid-column: 1; grid-row: 2; justify-self: start; }
-      .actions > form.inline { grid-column: 2; grid-row: 2; }
-      .edit-form { grid-row: 3; }
-    }
-    button, input[type=submit] {
-      font: inherit;
-      cursor: pointer;
-      border: 1px solid var(--border);
-      background: #fff;
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 13px;
-    }
-    button.primary, input[type=submit].primary {
-      background: var(--green);
-      border-color: var(--green);
-      color: #fff;
-    }
-    button.danger { color: #a33; }
-    button:hover { background: var(--green-light); }
-    button.primary:hover { background: #275834; }
-    form.inline { display: inline; }
-    form.add-form {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px dashed var(--border);
-    }
-    input[type=text], select, textarea {
-      font: inherit;
-      padding: 6px 8px;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      min-width: 0;
-      max-width: 100%;
-    }
-    input[type=text] { flex: 1 1 120px; min-width: 90px; }
-    .edit-form input[name="name"] { flex: 2 1 220px; }
-    .edit-form input[name="comment"] { flex: 1 1 90px; min-width: 70px; }
-    details > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--green); list-style: none; }
-    details > summary::-webkit-details-marker { display: none; }
-    .edit-form {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-top: 8px;
-      width: 100%;
-      box-sizing: border-box;
-      grid-column: 1 / -1;
-      grid-row: 2;
-    }
-    .empty { color: var(--muted); font-style: italic; font-size: 14px; }
-    .flash {
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 14px;
-      font-weight: 500;
-      margin-bottom: 14px;
-    }
-    .flash-ok  { background: #e6f4ea; color: #1e5c2f; border: 1px solid #b8dfc3; }
-    .flash-err { background: #fdecea; color: #822; border: 1px solid #f5c5c0; }
-  </style>
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <div class="wrap">
-    <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
-      <a href="/logout" class="muted" style="font-size:14px; font-weight:500;">Выйти</a>
+    {% block top_bar %}
+    <div class="top-bar">
+      <a href="/logout" class="muted logout-link">Выйти</a>
     </div>
+    {% endblock %}
     {% block content %}{% endblock %}
   </div>
+  <script src="/static/js/admin.js"></script>
 </body>
 </html>

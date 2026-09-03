@@ -10,25 +10,25 @@
   <div class="flash flash-err">⚠️ {{ err }}</div>
   {% endif %}
 
-  <div class="card" style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start;">
-    <div style="flex:1; min-width:200px;">
-      <div class="card-header" style="margin-bottom:6px;">
+  <div class="card io-row">
+    <div class="io-col-import">
+      <div class="card-header card-header--tight">
         <h2>📥 Импорт</h2>
       </div>
       <form method="post" action="/users/{{ user.id }}/import" enctype="multipart/form-data">
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <label style="font-size:13px; color:var(--muted);">CSV-файл:</label>
-          <input type="file" name="file" accept=".csv,text/csv" style="font-size:13px;">
-          <label style="font-size:13px; color:var(--muted);">или вставь текст (CSV / markdown):</label>
-          <textarea name="text" rows="5" placeholder="Суккуленты:&#10;- Хавортия&#10;- Эхеверия: пересажена в мае&#10;&#10;Или CSV: group,name,comment" style="font-family:monospace; font-size:13px; resize:vertical; padding:6px 8px; border:1px solid var(--border); border-radius:6px;"></textarea>
-          <input type="submit" class="primary" value="Импортировать" style="align-self:flex-start;">
+        <div class="io-col-import-fields">
+          <label class="field-label">CSV-файл:</label>
+          <input type="file" name="file" accept=".csv,text/csv" class="file-input">
+          <label class="field-label">или вставь текст (CSV / markdown):</label>
+          <textarea name="text" rows="5" placeholder="Суккуленты:&#10;- Хавортия&#10;- Эхеверия: пересажена в мае&#10;&#10;Или CSV: group,name,comment" class="import-textarea"></textarea>
+          <input type="submit" class="primary import-submit" value="Импортировать">
         </div>
       </form>
     </div>
-    <div style="flex:0 0 auto; display:flex; flex-direction:column; gap:8px; padding-top:4px;">
-      <h2 style="font-size:17px; margin:0 0 2px;">📤 Экспорт</h2>
-      <a href="/users/{{ user.id }}/export.csv" class="primary" style="display:inline-block; padding:5px 14px; border-radius:6px; background:var(--green); color:#fff; font-size:13px; font-weight:500; text-decoration:none;">Скачать CSV</a>
-      <p class="muted" style="margin:0;">group,name,comment</p>
+    <div class="io-col-export">
+      <h2 class="export-title">📤 Экспорт</h2>
+      <a href="/users/{{ user.id }}/export.csv" class="btn-export">Скачать CSV</a>
+      <p class="muted muted-tight">group,name,comment</p>
     </div>
   </div>
 
@@ -57,7 +57,7 @@
           </form>
         </details>
         <form class="inline" method="post" action="/plants/{{ plant.id }}/delete"
-              onsubmit="return confirm('Удалить «{{ plant.name }}»?');">
+              data-confirm="Удалить «{{ plant.name }}»?">
           <input type="hidden" name="user_id" value="{{ user.id }}">
           <button type="submit" class="danger">Удалить</button>
         </form>
@@ -65,15 +65,15 @@
     </li>
   {% endmacro %}
 
-  <div class="card">
-    <form class="add-form" method="post" action="/users/{{ user.id }}/groups" style="border-top:none; padding-top:0; margin-top:0;">
+  <div class="card" id="groups">
+    <form class="add-form add-form--flush" method="post" action="/users/{{ user.id }}/groups">
       <input type="text" name="name" placeholder="Название новой группы" required>
       <input type="submit" class="primary" value="+ Добавить группу">
     </form>
   </div>
 
   {% for group in groups %}
-    <div class="card">
+    <div class="card" id="group-{{ group.id }}">
       <div class="card-header">
         <h2>{{ group.name }}</h2>
         <span class="muted">{{ group.plants|length }} растений</span>
@@ -88,12 +88,12 @@
             <input type="submit" class="primary" value="Переименовать">
           </form>
           <form class="inline" method="post" action="/groups/{{ group.id }}/delete"
-                onsubmit="return confirm('Удалить группу «{{ group.name }}»? Растения останутся, но станут без группы.');">
+                data-confirm="Удалить группу «{{ group.name }}»? Растения останутся, но станут без группы.">
             <input type="hidden" name="user_id" value="{{ user.id }}">
             <button type="submit" class="danger">Удалить группу</button>
           </form>
           <form class="inline" method="post" action="/groups/{{ group.id }}/delete-with-plants"
-                onsubmit="return confirm('Удалить группу «{{ group.name }}» ВМЕСТЕ со всеми растениями внутри ({{ group.plants|length }} шт.)? Это необратимо.');">
+                data-confirm="Удалить группу «{{ group.name }}» ВМЕСТЕ со всеми растениями внутри ({{ group.plants|length }} шт.)? Это необратимо.">
             <input type="hidden" name="user_id" value="{{ user.id }}">
             <button type="submit" class="danger">Удалить группу и растения</button>
           </form>
@@ -117,7 +117,7 @@
     </div>
   {% endfor %}
 
-  <div class="card">
+  <div class="card" id="ungrouped">
     <div class="card-header">
       <h2>{{ ungrouped_label }}</h2>
       <span class="muted">{{ ungrouped|length }} растений</span>
@@ -130,7 +130,7 @@
           <input type="text" name="label" value="{{ user.ungrouped_label or '' }}" placeholder="Без группы">
           <input type="submit" class="primary" value="Сохранить">
         </form>
-        <p class="muted" style="margin:4px 0 0;">
+        <p class="muted hint">
           Это не настоящая группа — просто подпись для растений без group_id.
           Пустое поле сбрасывает на дефолт «Без группы».
         </p>
@@ -153,16 +153,16 @@
     </form>
   </div>
 
-  <div class="card" style="border-color:#f5c5c0;">
+  <div class="card card-danger">
     <div class="card-header">
-      <h2 style="color:#a33;">Удалить пользователя</h2>
+      <h2 class="danger-title">Удалить пользователя</h2>
     </div>
     <p class="muted">
       Полностью удаляет пользователя «{{ user.display_name }}» вместе со всеми его группами
       и растениями ({{ groups|length }} групп, {{ plant_count }} растений). Действие необратимо.
     </p>
     <form method="post" action="/users/{{ user.id }}/delete"
-          onsubmit="return confirm('Удалить ВСЮ базу пользователя «{{ user.display_name }}» — {{ groups|length }} групп и {{ plant_count }} растений? Это необратимо.');">
+          data-confirm="Удалить ВСЮ базу пользователя «{{ user.display_name }}» — {{ groups|length }} групп и {{ plant_count }} растений? Это необратимо.">
       <button type="submit" class="danger">Удалить пользователя и всю его базу</button>
     </form>
   </div>
