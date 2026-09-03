@@ -86,6 +86,7 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
         ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
     msg = request.query_params.get("msg")
     err = request.query_params.get("err")
+    plant_count = sum(len(g.plants) for g in groups) + len(ungrouped)
     return templates.TemplateResponse(
         "user_detail.html",
         {
@@ -94,10 +95,24 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
             "groups": groups,
             "ungrouped": ungrouped,
             "ungrouped_label": ungrouped_label,
+            "plant_count": plant_count,
             "msg": msg,
             "err": err,
         },
     )
+
+
+@app.post("/users/{user_id}/delete")
+async def delete_user(user_id: int, _: str = Depends(require_auth)):
+    """Полное и безвозвратное удаление пользователя со всеми его группами
+    и растениями."""
+    async with get_session() as session:
+        user = await crud.get_user(session, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        await crud.delete_user_data(session, user_id)
+        await session.commit()
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/users/{user_id}/export.csv")
@@ -242,6 +257,18 @@ async def delete_group(group_id: int, user_id: int = Form(...), _: str = Depends
         group = await crud.get_group(session, group_id, user_id)
         if group:
             await crud.delete_group(session, group)
+            await session.commit()
+    return RedirectResponse(f"/users/{user_id}", status_code=303)
+
+
+@app.post("/groups/{group_id}/delete-with-plants")
+async def delete_group_with_plants(group_id: int, user_id: int = Form(...), _: str = Depends(require_auth)):
+    """Удаляет группу вместе со всеми растениями внутри неё (в отличие от
+    /groups/{group_id}/delete, где растения остаются, просто без группы)."""
+    async with get_session() as session:
+        group = await crud.get_group(session, group_id, user_id)
+        if group:
+            await crud.delete_group_with_plants(session, group)
             await session.commit()
     return RedirectResponse(f"/users/{user_id}", status_code=303)
 

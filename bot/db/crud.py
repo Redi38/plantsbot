@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -44,6 +44,18 @@ async def get_user(session: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
+async def delete_user_data(session: AsyncSession, user_id: int) -> None:
+    """Безвозвратно удаляет пользователя вместе со всеми его группами и
+    растениями. Удаляем явными bulk-запросами (а не через каскад на
+    ORM-уровне), чтобы не зависеть от того, загружены ли связи —
+    в асинхронной сессии ленивая подгрузка коллекций на flush недоступна.
+    Используется только из админки."""
+    await session.execute(delete(Plant).where(Plant.user_id == user_id))
+    await session.execute(delete(Group).where(Group.user_id == user_id))
+    await session.execute(delete(User).where(User.id == user_id))
+    await session.flush()
+
+
 # ---------- Группы ----------
 
 async def get_group_by_name(session: AsyncSession, user_id: int, name: str) -> Group | None:
@@ -80,6 +92,15 @@ async def rename_group(session: AsyncSession, group: Group, new_name: str) -> No
 async def delete_group(session: AsyncSession, group: Group) -> None:
     for plant in group.plants:
         plant.group_id = None
+    await session.delete(group)
+    await session.flush()
+
+
+async def delete_group_with_plants(session: AsyncSession, group: Group) -> None:
+    """Как delete_group, но удаляет и все растения внутри группы, а не
+    просто открепляет их. Используется только из админки — в самом боте
+    удаление группы всегда сохраняет растения (переводит в "без группы")."""
+    await session.execute(delete(Plant).where(Plant.group_id == group.id))
     await session.delete(group)
     await session.flush()
 

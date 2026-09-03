@@ -92,6 +92,11 @@
             <input type="hidden" name="user_id" value="{{ user.id }}">
             <button type="submit" class="danger">Удалить группу</button>
           </form>
+          <form class="inline" method="post" action="/groups/{{ group.id }}/delete-with-plants"
+                onsubmit="return confirm('Удалить группу «{{ group.name }}» ВМЕСТЕ со всеми растениями внутри ({{ group.plants|length }} шт.)? Это необратимо.');">
+            <input type="hidden" name="user_id" value="{{ user.id }}">
+            <button type="submit" class="danger">Удалить группу и растения</button>
+          </form>
         </div>
       </details>
 
@@ -145,6 +150,20 @@
       <input type="text" name="name" placeholder="Название растения" required>
       <input type="text" name="comment" placeholder="Комментарий (необязательно)">
       <input type="submit" class="primary" value="+ Добавить">
+    </form>
+  </div>
+
+  <div class="card" style="border-color:#f5c5c0;">
+    <div class="card-header">
+      <h2 style="color:#a33;">Удалить пользователя</h2>
+    </div>
+    <p class="muted">
+      Полностью удаляет пользователя «{{ user.display_name }}» вместе со всеми его группами
+      и растениями ({{ groups|length }} групп, {{ plant_count }} растений). Действие необратимо.
+    </p>
+    <form method="post" action="/users/{{ user.id }}/delete"
+          onsubmit="return confirm('Удалить ВСЮ базу пользователя «{{ user.display_name }}» — {{ groups|length }} групп и {{ plant_count }} растений? Это необратимо.');">
+      <button type="submit" class="danger">Удалить пользователя и всю его базу</button>
     </form>
   </div>
 {% endblock %}
