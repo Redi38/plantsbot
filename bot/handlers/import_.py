@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -7,8 +8,9 @@ from aiogram.types import CallbackQuery, Message
 from bot.db import crud
 from bot.db.database import get_session
 from bot.keyboards.inline import confirm_keyboard
-from bot.keyboards.reply import BTN_IMPORT
+from bot.keyboards.reply import BTN_IMPORT, MENU_BUTTONS
 from bot.services import import_service
+from bot.utils.chat import begin_dialog
 from bot.utils.text import split_long_text
 
 router = Router(name="import_")
@@ -22,6 +24,14 @@ class ImportFlow(StatesGroup):
 
 @router.message(F.text == BTN_IMPORT)
 async def cmd_import(message: Message, state: FSMContext) -> None:
+    # Как и "Список" — прерывает и сразу подчищает зависшую подсказку
+    # добавления/редактирования, если импорт запущен посреди неё.
+    old_msg_id = await begin_dialog(state)
+    if old_msg_id:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
+        except TelegramBadRequest:
+            pass
     await state.set_state(ImportFlow.waiting_input)
     await message.answer(
         "Пришли список растений одним из способов:\n\n"
@@ -46,7 +56,7 @@ async def import_file(message: Message, state: FSMContext, bot) -> None:
     await _process_import(message, state, raw_text, is_csv)
 
 
-@router.message(StateFilter(ImportFlow.waiting_input), F.text)
+@router.message(StateFilter(ImportFlow.waiting_input), F.text, ~F.text.in_(MENU_BUTTONS))
 async def import_text(message: Message, state: FSMContext) -> None:
     await _process_import(message, state, message.text, is_csv=False)
 

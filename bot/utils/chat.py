@@ -13,6 +13,19 @@ from aiogram.types import CallbackQuery, Message
 _KEY = "_bot_msg_id"
 
 
+async def begin_dialog(state: FSMContext) -> int | None:
+    """Начинает новый диалог с нуля: возвращает id ранее отслеживаемого
+    рабочего сообщения бота (если сценарий уже был начат — из другой
+    точки входа или повторным нажатием той же кнопки) и полностью
+    очищает состояние. Вызывающий код должен сам удалить или
+    переиспользовать (edit_text) это сообщение, чтобы в чате не
+    оставалось "осиротевших" подсказок."""
+    data = await state.get_data()
+    msg_id = data.get(_KEY)
+    await state.clear()
+    return msg_id
+
+
 async def render(message: Message, state: FSMContext, text: str, reply_markup=None) -> None:
     """Удаляет предыдущее сообщение бота в этом диалоге (если такое
     отслеживается) и присылает новое вместо него — так в чате не

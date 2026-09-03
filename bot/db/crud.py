@@ -127,7 +127,9 @@ async def find_plant_by_name(
 ) -> Plant | None:
     """Ищет растение с таким же именем (без учёта регистра) в той же
     группе (group_id=None -> среди растений без группы) — используется
-    для проверки на повтор перед добавлением."""
+    для проверки на повтор перед добавлением. Раз дубли разрешены (по
+    подтверждению), совпадений может быть несколько — берём первое,
+    а не scalar_one_or_none(), который упал бы с ошибкой на 2+."""
     result = await session.execute(
         select(Plant).where(
             Plant.user_id == user_id,
@@ -135,7 +137,22 @@ async def find_plant_by_name(
             func.lower(Plant.name) == name.strip().lower(),
         )
     )
-    return result.scalar_one_or_none()
+    return result.scalars().first()
+
+
+async def find_plant_by_name_any_group(
+    session: AsyncSession, user_id: int, name: str
+) -> Plant | None:
+    """Как find_plant_by_name, но без учёта группы — ищет совпадение
+    по имени среди всех растений пользователя. Используется для ранней
+    проверки на повтор сразу после ввода названия, ещё до выбора группы."""
+    result = await session.execute(
+        select(Plant).where(
+            Plant.user_id == user_id,
+            func.lower(Plant.name) == name.strip().lower(),
+        )
+    )
+    return result.scalars().first()
 
 
 async def delete_plant(session: AsyncSession, plant: Plant) -> None:

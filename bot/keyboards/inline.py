@@ -13,10 +13,10 @@ def groups_keyboard(
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for group in groups:
-        builder.button(text=group.name, callback_data=f"{prefix}:{group.id}")
+        builder.button(text=group.name, callback_data=f"{prefix}:{group.id}", style="primary")
     if allow_none:
-        builder.button(text=none_label, callback_data=f"{prefix}:none")
-    builder.button(text="➕ Новая группа", callback_data=f"{prefix}:new")
+        builder.button(text=none_label, callback_data=f"{prefix}:none", style="primary")
+    builder.button(text="➕ Новая группа", callback_data=f"{prefix}:new", style="primary")
     if cancel_data:
         builder.button(text="❌ Отмена", callback_data=cancel_data, style="danger")
     builder.adjust(1)
@@ -25,7 +25,7 @@ def groups_keyboard(
 
 def confirm_keyboard(yes_data: str, no_data: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Да", callback_data=yes_data)
-    builder.button(text="❌ Отмена", callback_data=no_data)
+    builder.button(text="✅ Импортировать", callback_data=yes_data, style="success")
+    builder.button(text="❌ Отмена", callback_data=no_data, style="danger")
     builder.adjust(2)
     return builder.as_markup()

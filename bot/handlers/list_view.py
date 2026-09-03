@@ -1,6 +1,7 @@
 from aiogram import F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -9,6 +10,7 @@ from bot.db.database import get_session
 from bot.db.models import Group
 from bot.keyboards.reply import BTN_LIST, main_menu_keyboard
 from bot.services import plant_service
+from bot.utils.chat import begin_dialog
 
 router = Router(name="list_view")
 
@@ -62,7 +64,17 @@ async def _group_menu_text_and_kb(user_id: int):
 
 
 @router.message(F.text == BTN_LIST)
-async def cmd_list(message: Message) -> None:
+async def cmd_list(message: Message, state: FSMContext) -> None:
+    # Кнопка "Список" доступна в любой момент, в том числе посреди
+    # сценария добавления/редактирования — прерываем его и сразу
+    # удаляем зависшую подсказку (иначе следующий запуск add-сценария
+    # из другого места её не найдёт и не удалит).
+    old_msg_id = await begin_dialog(state)
+    if old_msg_id:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
+        except TelegramBadRequest:
+            pass
     async with get_session() as session:
         user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
         await session.commit()
