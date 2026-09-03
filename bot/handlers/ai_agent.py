@@ -8,6 +8,7 @@
 
 from aiogram import F, Router
 from aiogram.types import Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import config
 from bot.db import crud
@@ -47,7 +48,10 @@ async def handle_free_text(message: Message) -> None:
                 await message.answer(f"⚠️ «{exc.existing.name}» уже есть в этом списке — не добавляю повторно")
                 return
         group_part = f" в группу «{intent['group_name']}»" if intent.get("group_name") else ""
-        await message.answer(f"🌱 Добавила «{plant.name}»{group_part}")
+        group_token = "none" if plant.group_id is None else str(plant.group_id)
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📋 Список", callback_data=f"lg:{group_token}")
+        await message.answer(f"🌱 Добавила «{plant.name}»{group_part}", reply_markup=builder.as_markup())
         return
 
     if action == "delete" and intent.get("plant_name"):

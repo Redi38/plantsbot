@@ -125,11 +125,15 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
     is_real_group = token not in ("all", "none")
 
     if token == "all":
+        # row1: crud buttons, row2: pagination (if any), row3: back
         add_crud()
         add_pagination()
         add_back()
         row_sizes = [3] + ([pagination_row_size] if pagination_row_size else []) + [1]
     else:
+        # Назад всегда на последнем ряду:
+        # - если есть пагинация: row1 = пагинация, row2 = crud, [row3 = переименовать группу], row(посл.) = назад
+        # - если пагинации нет: row1 = crud, [row2 = переименовать группу], row(посл.) = назад
         if total_pages > 1:
             add_pagination()
             add_crud()
@@ -166,13 +170,31 @@ async def show_group_page(callback: CallbackQuery, token: str, page: int) -> Non
         pass
 
 
-async def send_group_page(message: Message, user_id: int, token: str, page: int = 1) -> None:
+async def send_group_page(
+    message: Message,
+    user_id: int,
+    token: str,
+    page: int = 1,
+    edit_message_id: int | None = None,
+    notice: str | None = None,
+) -> None:
     result = await pages_for(user_id, token)
     if result is None:
         return
     _, pages = result
     page = max(1, min(page, len(pages)))
-    await message.answer(pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages)))
+    text = pages[page - 1]
+    if notice:
+        text = f"{notice}\n\n{text}"
+    markup = group_pages_keyboard(token, page, len(pages))
+
+    if edit_message_id:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=edit_message_id)
+        except TelegramBadRequest:
+            pass
+
+    await message.answer(text, reply_markup=markup)
 
 
 @router.callback_query(F.data.startswith("lg:"))
