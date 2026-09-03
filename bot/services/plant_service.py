@@ -4,7 +4,13 @@ from bot.db import crud
 from bot.db.models import Plant
 from bot.utils.text import split_long_text
 
-_LIST_HEADER = "🌿 <b>Все растения</b>"
+
+class DuplicatePlantError(Exception):
+    """Растение с таким именем уже есть в этой же группе."""
+
+    def __init__(self, existing: Plant):
+        self.existing = existing
+        super().__init__(f"Растение «{existing.name}» уже есть в этом списке")
 
 
 async def add_plant(
@@ -18,6 +24,10 @@ async def add_plant(
     if group_name:
         group, _ = await crud.get_or_create_group(session, user_id, group_name)
         group_id = group.id
+
+    existing = await crud.find_plant_by_name(session, user_id, name, group_id)
+    if existing:
+        raise DuplicatePlantError(existing)
 
     plant = await crud.create_plant(session, user_id, name, group_id=group_id, comment=comment)
     await session.commit()
@@ -45,7 +55,7 @@ _ungrouped_label = get_ungrouped_label
 
 
 def _render_group_block(name: str, plants: list[Plant]) -> str:
-    lines = [f"<b>{name}</b>"]
+    lines = [f"<b>{name} ({len(plants)})</b>"]
     if not plants:
         lines.append("<i>(пусто)</i>")
     for plant in plants:
@@ -87,16 +97,19 @@ async def render_pages(session: AsyncSession, user_id: int) -> list[str]:
     if ungrouped:
         blocks.append((await _ungrouped_label(session, user_id), ungrouped))
 
+    total = sum(len(plants) for _, plants in blocks)
+    list_header = f"🌿 <b>Все растения ({total})</b>"
+
     pages: list[str] = []
     for name, plants in blocks:
         block_text = _render_group_block(name, plants)
-        full_text = f"{_LIST_HEADER}\n\n{block_text}"
+        full_text = f"{list_header}\n\n{block_text}"
 
         chunks = split_long_text(block_text)
         if len(chunks) == 1:
             pages.append(full_text)
         else:
             for i, chunk in enumerate(chunks):
-                pages.append(f"{_LIST_HEADER}\n\n{chunk}" if i == 0 else chunk)
+                pages.append(f"{list_header}\n\n{chunk}" if i == 0 else chunk)
 
     return pages

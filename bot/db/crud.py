@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -78,7 +78,6 @@ async def rename_group(session: AsyncSession, group: Group, new_name: str) -> No
 
 
 async def delete_group(session: AsyncSession, group: Group) -> None:
-    # растения не удаляются, просто становятся "без группы"
     for plant in group.plants:
         plant.group_id = None
     await session.delete(group)
@@ -119,6 +118,22 @@ async def create_plant(
 async def get_plant(session: AsyncSession, plant_id: int, user_id: int) -> Plant | None:
     result = await session.execute(
         select(Plant).where(Plant.id == plant_id, Plant.user_id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def find_plant_by_name(
+    session: AsyncSession, user_id: int, name: str, group_id: int | None
+) -> Plant | None:
+    """Ищет растение с таким же именем (без учёта регистра) в той же
+    группе (group_id=None -> среди растений без группы) — используется
+    для проверки на повтор перед добавлением."""
+    result = await session.execute(
+        select(Plant).where(
+            Plant.user_id == user_id,
+            Plant.group_id == group_id,
+            func.lower(Plant.name) == name.strip().lower(),
+        )
     )
     return result.scalar_one_or_none()
 

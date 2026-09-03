@@ -26,7 +26,7 @@ async def handle_free_text(message: Message) -> None:
         intent = await ai_service.parse_intent(message.text)
     except ai_service.AIServiceUnavailable:
         await message.answer(
-            "Не поняла запрос. Используй кнопки ➕ Добавить, 🗑 Удалить или ℹ️ Помощь внизу экрана."
+            "Не поняла запрос. Используй кнопки ➕ Добавить или 📋 Список внизу экрана."
         )
         return
 
@@ -35,13 +35,17 @@ async def handle_free_text(message: Message) -> None:
     if action == "add" and intent.get("plant_name"):
         async with get_session() as session:
             user = await crud.get_or_create_user(session, message.from_user.id, message.from_user.username, message.from_user.full_name)
-            plant = await plant_service.add_plant(
-                session,
-                user.id,
-                name=intent["plant_name"],
-                group_name=intent.get("group_name"),
-                comment=intent.get("comment"),
-            )
+            try:
+                plant = await plant_service.add_plant(
+                    session,
+                    user.id,
+                    name=intent["plant_name"],
+                    group_name=intent.get("group_name"),
+                    comment=intent.get("comment"),
+                )
+            except plant_service.DuplicatePlantError as exc:
+                await message.answer(f"⚠️ «{exc.existing.name}» уже есть в этом списке — не добавляю повторно")
+                return
         group_part = f" в группу «{intent['group_name']}»" if intent.get("group_name") else ""
         await message.answer(f"🌱 Добавила «{plant.name}»{group_part}")
         return
@@ -56,12 +60,12 @@ async def handle_free_text(message: Message) -> None:
 
         if not matches:
             await message.answer(
-                f"Не нашла растение «{intent['plant_name']}». Проверь 📋 Список или удали вручную кнопкой 🗑 Удалить"
+                f"Не нашла растение «{intent['plant_name']}». Проверь 📋 Список или удали вручную из списка"
             )
             return
         if len(matches) > 1:
             await message.answer(
-                f"Нашла несколько растений с именем «{intent['plant_name']}» — удали вручную кнопкой 🗑 Удалить"
+                f"Нашла несколько растений с именем «{intent['plant_name']}» — удали вручную из списка"
             )
             return
 

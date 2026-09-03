@@ -92,10 +92,13 @@ async def import_confirm(callback: CallbackQuery) -> None:
 
     async with get_session() as session:
         user = await crud.get_or_create_user(session, callback.from_user.id, callback.from_user.username, callback.from_user.full_name)
-        count = await import_service.commit_import(session, user.id, preview)
+        count, skipped = await import_service.commit_import(session, user.id, preview)
 
     await callback.answer()
-    await callback.message.edit_text(f"✅ Импортировано растений: {count}")
+    text = f"✅ Импортировано растений: {count}"
+    if skipped:
+        text += f"\n⚠️ Пропущено как повтор: {skipped}"
+    await callback.message.edit_text(text)
 
 
 @router.callback_query(F.data == "import_cancel")

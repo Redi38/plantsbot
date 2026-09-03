@@ -23,14 +23,3 @@ def confirm_keyboard(yes_data: str, no_data: str) -> InlineKeyboardMarkup:
     builder.button(text="❌ Отмена", callback_data=no_data)
     builder.adjust(2)
     return builder.as_markup()
-
-
-def plant_delete_keyboard(plant_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"plant_delete_confirm:{plant_id}"),
-                InlineKeyboardButton(text="Отмена", callback_data="cancel"),
-            ]
-        ]
-    )
