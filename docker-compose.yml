@@ -1,5 +1,5 @@
 services:
-  plant-bot:
+  bot:
     build:
       context: .
       target: bot
@@ -10,7 +10,7 @@ services:
     environment:
       - DATABASE_URL=sqlite+aiosqlite:///./data/plants.db
 
-  plant-admin:
+  admin:
     build:
       context: .
       target: web

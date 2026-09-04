@@ -7,6 +7,18 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+CjxjaXJjbGUgY3g9IjMyIiBjeT0iMzIiIHI9IjMwIiBmaWxsPSIjZWFmM2VjIi8+CjxwYXRoIGQ9Ik0zMiA0NyBMMzIgMjciIHN0cm9rZT0iIzJmNmIzZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIGZpbGw9Im5vbmUiLz4KPHBhdGggZD0iTTMyIDMxYy0xMS0xLTE2LTExLTEyLTIwIDExIDEgMTYgMTEgMTIgMjB6IiBmaWxsPSIjMmY2YjNmIi8+CjxwYXRoIGQ9Ik0zMiAyN2MxMS0xIDE2LTExIDEyLTIwLTExIDEtMTYgMTEtMTIgMjB6IiBmaWxsPSIjM2Y4YTUyIi8+Cjwvc3ZnPg==">
   <link rel="stylesheet" href="/static/css/style.css">
   {% block extra_head %}{% endblock %}
+  <script>
+    // Фрагмент (#group-N) браузер серверу не отправляет — знает про него
+    // только клиент, поэтому решение принимаем тут же, синхронно, ДО того
+    // как body начнёт рисоваться. Без этого браузер красит страницу сверху
+    // и только потом (уже видимо для глаза) прыгает к нужной группе —
+    // получается "кинуло наверх, потом опустило", даже без плавной
+    // прокрутки. Прячем страницу здесь и открываем в конце body — уже
+    // когда прокрутка встала на нужное место.
+    if (location.hash) {
+      document.documentElement.style.visibility = "hidden";
+    }
+  </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
   <div class="wrap">
@@ -18,5 +30,14 @@
     {% block content %}{% endblock %}
   </div>
   <script src="/static/js/admin.js"></script>
+  <script>
+    if (location.hash) {
+      var target = document.querySelector(location.hash);
+      if (target) {
+        target.scrollIntoView({ block: "start" });
+      }
+      document.documentElement.style.visibility = "";
+    }
+  </script>
 </body>
 </html>

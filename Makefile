@@ -8,11 +8,11 @@ up:
 
 ## Собрать и (пере)запустить только бота
 bot:
-	$(COMPOSE) up -d --build plant-bot
+	$(COMPOSE) up -d --build bot
 
 ## Собрать и (пере)запустить только админку
 admin:
-	$(COMPOSE) up -d --build plant-admin
+	$(COMPOSE) up -d --build admin
 
 ## Собрать образы без запуска
 build:
@@ -39,11 +39,11 @@ logs:
 
 ## Логи только бота
 logs-bot:
-	$(COMPOSE) logs -f plant-bot
+	$(COMPOSE) logs -f bot
 
 ## Логи только админки
 logs-admin:
-	$(COMPOSE) logs -f plant-admin
+	$(COMPOSE) logs -f admin
 
 ## Остановить, удалить контейнеры и volume с данными (ОСТОРОЖНО: удаляет БД)
 clean:

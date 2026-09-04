@@ -19,7 +19,6 @@ h1 { font-size: 22px; margin: 0 0 4px; }
 h2 { font-size: 17px; margin: 0; }
 a { color: var(--green); text-decoration: none; }
 a:hover { text-decoration: underline; }
-html { scroll-behavior: smooth; }
 
 /* ---------- Layout: карточки, шапка ---------- */
 .wrap { max-width: 1180px; margin: 0 auto; }
@@ -34,9 +33,6 @@ html { scroll-behavior: smooth; }
   margin-bottom: 14px;
   scroll-margin-top: 16px;
 }
-/* Подсвечиваем карточку, к которой вернул якорь после редиректа (#group-N,
-   #ungrouped, #groups) — без этого просто не видно, что страницу не
-   выкинуло в случайное место, а осознанно вернуло куда нужно. */
 .card:target {
   animation: target-flash 1.6s ease;
 }
@@ -63,7 +59,7 @@ html { scroll-behavior: smooth; }
 ul.plants { list-style: none; margin: 8px 0 0; padding: 0; }
 ul.plants li {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: start;
   column-gap: 10px;
   row-gap: 8px;
@@ -72,12 +68,8 @@ ul.plants li {
 }
 ul.plants li:first-child { border-top: none; }
 .plant-name-block { grid-column: 1; grid-row: 1; min-width: 0; }
-.plant-name { font-weight: 500; word-break: break-word; }
-.plant-comment { color: var(--muted); font-size: 13px; word-break: break-word; }
-/* .actions и <details> уровня растения "уплощены" через display:contents,
-   чтобы "Изменить" и "Удалить" всегда оставались в первой строке грида,
-   независимо от того, открыта форма редактирования (2я строка, во всю
-   ширину) или нет. */
+.plant-name { font-weight: 500; word-break: break-word; overflow-wrap: anywhere; }
+.plant-comment { color: var(--muted); font-size: 13px; word-break: break-word; overflow-wrap: anywhere; }
 .actions { display: contents; }
 .actions > details { display: contents; }
 .actions > details > summary {
@@ -92,7 +84,7 @@ ul.plants li:first-child { border-top: none; }
   justify-self: end;
 }
 @media (max-width: 460px) {
-  ul.plants li { grid-template-columns: 1fr auto; }
+  ul.plants li { grid-template-columns: minmax(0, 1fr) auto; }
   .plant-name-block { grid-column: 1 / -1; }
   .actions > details > summary { grid-column: 1; grid-row: 2; justify-self: start; }
   .actions > form.inline { grid-column: 2; grid-row: 2; }
@@ -155,10 +147,28 @@ details > summary::-webkit-details-marker { display: none; }
 
 /* ---------- Импорт / экспорт ---------- */
 .io-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
-.io-col-import { flex: 1; min-width: 200px; }
+.io-col-import { flex: 0 1 420px; max-width: 420px; min-width: 200px; }
 .io-col-import-fields { display: flex; flex-direction: column; gap: 8px; }
 .field-label { font-size: 13px; color: var(--muted); }
-.file-input { font-size: 13px; }
+.file-input {
+  font-size: 13px;
+}
+.file-input::file-selector-button,
+.file-input::-webkit-file-upload-button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  margin-right: 8px;
+}
+.file-input:hover::file-selector-button,
+.file-input:hover::-webkit-file-upload-button {
+  background: #275834;
+}
 .import-textarea {
   font-family: monospace;
   font-size: 13px;
@@ -168,7 +178,10 @@ details > summary::-webkit-details-marker { display: none; }
   border-radius: 6px;
 }
 .import-submit { align-self: flex-start; }
-.io-col-export { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.io-col-export { flex: 0 0 auto; margin-left: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 4px; }
+@media (max-width: 700px) {
+  .io-col-export { margin-left: 0; }
+}
 .export-title { font-size: 17px; margin: 0 0 2px; }
 .btn-export {
   display: inline-block;
