@@ -6,6 +6,8 @@
 и активные FSM-сценарии (add/rename/import) успеют перехватить сообщение раньше.
 """
 
+import logging
+
 from aiogram import F, Router
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -16,6 +18,7 @@ from bot.db.database import get_session
 from bot.services import ai_service, plant_service
 
 router = Router(name="ai_agent")
+logger = logging.getLogger(__name__)
 
 
 @router.message(F.text)
@@ -25,7 +28,12 @@ async def handle_free_text(message: Message, user_id: int) -> None:
 
     try:
         intent = await ai_service.parse_intent(message.text)
-    except ai_service.AIServiceUnavailable:
+    except ai_service.AIServiceUnavailable as exc:
+        # Раньше причина падения (код ответа AI API, текст ошибки — всё это
+        # есть в самом exc) нигде не логировалась и терялась молча, пользователь
+        # получал только общую фразу — из логов бота было не понять, что
+        # именно не так (неверный ключ, битый URL, модель недоступна и т.д.).
+        logger.warning("AI-агент недоступен: %s", exc)
         await message.answer(
             "Не поняла запрос. Используй кнопки ➕ Добавить или 📋 Список внизу экрана."
         )

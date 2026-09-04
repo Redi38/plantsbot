@@ -60,7 +60,15 @@ async def delete_user_data(session: AsyncSession, user_id: int) -> None:
 
 async def get_group_by_name(session: AsyncSession, user_id: int, name: str) -> Group | None:
     """Регистронезависимый поиск группы с обрезкой пробелов —
-    чтобы "Суккуленты" и "суккуленты " матчились в одну группу."""
+    чтобы "Суккуленты" и "суккуленты " матчились в одну группу.
+
+    Сравнение через func.lower() в SQL здесь не подходит: встроенный
+    LOWER() в SQLite приводит к нижнему регистру только ASCII-символы
+    (без расширения ICU кириллица не трогается вообще), а бот целиком
+    русскоязычный. Поэтому регистронезависимость считается в Python,
+    где str.lower() работает с Unicode корректно; группы одного
+    пользователя — это единицы-десятки записей, так что подгрузка
+    всех и сравнение в цикле не создаёт проблем с производительностью."""
     normalized = name.strip().lower()
     result = await session.execute(select(Group).where(Group.user_id == user_id))
     for group in result.scalars():

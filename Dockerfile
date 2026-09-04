@@ -8,6 +8,10 @@ RUN pip install --no-cache-dir -r requirements-bot.txt -r requirements-admin.txt
 
 COPY bot ./bot
 COPY admin ./admin
+COPY docker-entrypoint.py ./docker-entrypoint.py
+
+RUN useradd --create-home --uid 1000 appuser
+ENTRYPOINT ["python", "docker-entrypoint.py"]
 
 FROM base AS bot
 CMD ["python", "-m", "bot.main"]
