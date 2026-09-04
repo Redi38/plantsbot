@@ -1,4 +1,4 @@
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -44,15 +44,19 @@ async def get_user(session: AsyncSession, user_id: int) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def delete_user_data(session: AsyncSession, user_id: int) -> None:
-    """Безвозвратно удаляет пользователя вместе со всеми его группами и
-    растениями. Удаляем явными bulk-запросами (а не через каскад на
-    ORM-уровне), чтобы не зависеть от того, загружены ли связи —
-    в асинхронной сессии ленивая подгрузка коллекций на flush недоступна.
-    Используется только из админки."""
+async def clear_user_plants(session: AsyncSession, user_id: int) -> None:
+    """Безвозвратно удаляет всю базу растений пользователя (группы и
+    растения) вместе с кастомной подписью "без группы", но саму запись
+    пользователя оставляет — чтобы бот продолжал узнавать его при
+    следующем обращении. Удаляем явными bulk-запросами (а не через
+    каскад на ORM-уровне), чтобы не зависеть от того, загружены ли
+    связи — в асинхронной сессии ленивая подгрузка коллекций на flush
+    недоступна. Используется только из админки."""
     await session.execute(delete(Plant).where(Plant.user_id == user_id))
     await session.execute(delete(Group).where(Group.user_id == user_id))
-    await session.execute(delete(User).where(User.id == user_id))
+    await session.execute(
+        update(User).where(User.id == user_id).values(ungrouped_label=None)
+    )
     await session.flush()
 
 

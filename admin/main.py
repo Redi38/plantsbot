@@ -134,15 +134,16 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
 
 @app.post("/users/{user_id}/delete")
 async def delete_user(user_id: int, _: str = Depends(require_auth)):
-    """Полное и безвозвратное удаление пользователя со всеми его группами
-    и растениями."""
+    """Очищает всю базу растений пользователя (группы и растения), но
+    саму запись пользователя не трогает — бот должен продолжать узнавать
+    его при следующем обращении, просто с пустым списком."""
     async with get_session() as session:
         user = await crud.get_user(session, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
-        await crud.delete_user_data(session, user_id)
+        await crud.clear_user_plants(session, user_id)
         await session.commit()
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(f"/users/{user_id}?msg=База очищена", status_code=303)
 
 
 @app.get("/users/{user_id}/export.csv")
@@ -197,8 +198,6 @@ async def import_plants(
     if not raw:
         return RedirectResponse(f"/users/{user_id}?err=Нет данных для импорта", status_code=303)
 
-    # Пробуем определить формат: CSV если есть заголовок group,name,comment или name,
-    # иначе считаем markdown
     first_line = raw.splitlines()[0].lower().strip()
     is_csv = "name" in first_line and ("," in first_line or ";" in first_line)
 
@@ -206,8 +205,6 @@ async def import_plants(
         if is_csv:
             rows = import_service.parse_csv(raw)
         else:
-            # для markdown-формата пробуем сначала CSV (вдруг без заголовка не подходит),
-            # fallback на markdown
             try:
                 rows = import_service.parse_csv(raw)
             except import_service.ImportParseError:
@@ -290,8 +287,6 @@ async def delete_group(group_id: int, user_id: int = Form(...), _: str = Depends
         if group:
             await crud.delete_group(session, group)
             await session.commit()
-    # группы больше нет, но её растения переехали в "без группы" —
-    # логично показать именно этот раздел, а не верх страницы
     return _user_redirect(user_id, "ungrouped")
 
 
@@ -326,7 +321,6 @@ async def rename_plant(
                 session, plant, name=name, comment=comment.strip() or None, group_id=gid
             )
             await session.commit()
-    # растение могло переехать в другую группу — якорим на новую, не старую
     return _user_redirect(user_id, _group_anchor(gid))
 
 

@@ -32,6 +32,20 @@
     </div>
   </div>
 
+  <div class="card" id="plant-search-card">
+    <div class="search-row">
+      <input
+        type="text"
+        id="plant-search"
+        class="search-input"
+        placeholder="Поиск по всем растениям…"
+        autocomplete="off"
+      >
+      <button type="button" id="plant-search-clear" class="search-clear" hidden>✕</button>
+      <span id="plant-search-count" class="muted search-count"></span>
+    </div>
+  </div>
+
   {% macro group_options(selected) %}
     <option value="" {% if not selected %}selected{% endif %}>{{ ungrouped_label }}</option>
     {% for g in groups %}
@@ -73,7 +87,7 @@
   </div>
 
   {% for group in groups %}
-    <div class="card" id="group-{{ group.id }}">
+    <div class="card plant-group-card" id="group-{{ group.id }}" data-group-name="{{ group.name }}">
       <div class="card-header">
         <h2>{{ group.name }}</h2>
         <span class="muted">{{ group.plants|length }} растений</span>
@@ -117,7 +131,7 @@
     </div>
   {% endfor %}
 
-  <div class="card" id="ungrouped">
+  <div class="card plant-group-card" id="ungrouped" data-group-name="{{ ungrouped_label }}">
     <div class="card-header">
       <h2>{{ ungrouped_label }}</h2>
       <span class="muted">{{ ungrouped|length }} растений</span>
@@ -191,15 +205,16 @@
 
   <div class="card card-danger">
     <div class="card-header">
-      <h2 class="danger-title">Удалить пользователя</h2>
+      <h2 class="danger-title">Очистить базу пользователя</h2>
     </div>
     <p class="muted">
-      Полностью удаляет пользователя «{{ user.display_name }}» вместе со всеми его группами
-      и растениями ({{ groups|length }} групп, {{ plant_count }} растений). Действие необратимо.
+      Удаляет все группы и растения пользователя «{{ user.display_name }}»
+      ({{ groups|length }} групп, {{ plant_count }} растений). Сам пользователь в базе
+      остаётся — бот продолжит его узнавать, просто с пустым списком. Действие необратимо.
     </p>
     <form method="post" action="/users/{{ user.id }}/delete"
-          data-confirm="Удалить ВСЮ базу пользователя «{{ user.display_name }}» — {{ groups|length }} групп и {{ plant_count }} растений? Это необратимо.">
-      <button type="submit" class="danger">Удалить пользователя и всю его базу</button>
+          data-confirm="Удалить ВСЮ базу растений пользователя «{{ user.display_name }}» — {{ groups|length }} групп и {{ plant_count }} растений? Сам пользователь останется. Это необратимо.">
+      <button type="submit" class="danger">Очистить базу пользователя</button>
     </form>
   </div>
 {% endblock %}

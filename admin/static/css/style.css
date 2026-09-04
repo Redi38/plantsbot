@@ -195,6 +195,21 @@ details > summary::-webkit-details-marker { display: none; }
   text-decoration: none;
 }
 
+/* ---------- Поиск по растениям ---------- */
+#plant-search-card { padding: 10px 14px; }
+.search-row { display: flex; align-items: center; gap: 8px; }
+.search-input {
+  flex: 1 1 auto;
+  font-size: 15px;
+  padding: 8px 10px;
+}
+.search-clear {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  color: var(--muted);
+}
+.search-count { flex: 0 0 auto; white-space: nowrap; }
+
 /* ---------- Флеш-сообщения ---------- */
 .flash {
   padding: 10px 14px;
