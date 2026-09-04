@@ -153,6 +153,42 @@
     </form>
   </div>
 
+  <div class="card" id="ai-logs">
+    <div class="card-header">
+      <h2>🧠 Логи ИИ-агента</h2>
+      <a href="/ai-logs" class="muted">Все пользователи →</a>
+    </div>
+    {% if ai_logs %}
+      <ul class="ai-logs">
+        {% for log in ai_logs %}
+          <li class="ai-log">
+            <div class="ai-log-top">
+              <span class="muted">{{ log.created_at.strftime("%d.%m.%Y %H:%M") }}</span>
+            </div>
+            <p class="ai-log-text">«{{ log.user_text }}»</p>
+            {% if log.error %}
+              <span class="ai-log-badge ai-log-badge--error">ошибка</span>
+              <p class="ai-log-error">{{ log.error }}</p>
+            {% else %}
+              <span class="ai-log-badge {% if log.action == 'unknown' or not log.action %}ai-log-badge--unknown{% endif %}">
+                {{ log.action or "unknown" }}
+              </span>
+              {% if log.plant_name or log.group_name or log.comment %}
+                <div class="ai-log-meta">
+                  {% if log.plant_name %}<span>🌱 {{ log.plant_name }}</span>{% endif %}
+                  {% if log.group_name %}<span>📁 {{ log.group_name }}</span>{% endif %}
+                  {% if log.comment %}<span>💬 {{ log.comment }}</span>{% endif %}
+                </div>
+              {% endif %}
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">Пока обращений не было.</p>
+    {% endif %}
+  </div>
+
   <div class="card card-danger">
     <div class="card-header">
       <h2 class="danger-title">Удалить пользователя</h2>

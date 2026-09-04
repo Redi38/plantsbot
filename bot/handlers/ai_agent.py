@@ -160,12 +160,27 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
         intent = await ai_service.parse_intent(message.text, existing_groups=existing_group_names)
     except ai_service.AIServiceUnavailable as exc:
         logger.warning("AI-агент недоступен: %s", exc)
+        async with get_session() as session:
+            await crud.create_ai_log(session, user_id, message.text, error=str(exc))
+            await session.commit()
         await message.answer(
             "Не поняла запрос. Используй кнопки ➕ Добавить или 📋 Список внизу экрана."
         )
         return
 
     action = intent.get("action")
+
+    async with get_session() as session:
+        await crud.create_ai_log(
+            session,
+            user_id,
+            message.text,
+            action=action,
+            plant_name=intent.get("plant_name"),
+            group_name=intent.get("group_name"),
+            comment=intent.get("comment"),
+        )
+        await session.commit()
 
     if action == "add" and intent.get("plant_name"):
         plant_name = intent["plant_name"]

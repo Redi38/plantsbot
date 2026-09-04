@@ -24,6 +24,11 @@
   <div class="wrap">
     {% block top_bar %}
     <div class="top-bar">
+      {% if request.url.path.startswith('/ai-logs') %}
+        <a href="/" class="nav-link">Главное меню</a>
+      {% else %}
+        <a href="/ai-logs" class="nav-link">Логи ИИ</a>
+      {% endif %}
       <a href="/logout" class="muted logout-link">Выйти</a>
     </div>
     {% endblock %}

@@ -88,6 +88,20 @@ async def users_list(request: Request, _: str = Depends(require_auth)):
     )
 
 
+# ---------- Логи ИИ-агента ----------
+
+@app.get("/ai-logs")
+async def ai_logs_list(request: Request, _: str = Depends(require_auth)):
+    """Последние обращения к ИИ-агенту по всем пользователям — чтобы видеть
+    реальные формулировки и промахи распознавания вне контекста конкретного
+    пользователя."""
+    async with get_session() as session:
+        entries = await crud.list_ai_logs_all(session, limit=200)
+    return templates.TemplateResponse(
+        "ai_logs.html", {"request": request, "entries": entries}
+    )
+
+
 # ---------- Растения и группы одного пользователя ----------
 
 @app.get("/users/{user_id}")
@@ -98,6 +112,7 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         groups, ungrouped = await crud.get_full_tree(session, user.id)
         ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
+        ai_logs = await crud.list_ai_logs_for_user(session, user.id, limit=30)
     msg = request.query_params.get("msg")
     err = request.query_params.get("err")
     plant_count = sum(len(g.plants) for g in groups) + len(ungrouped)
@@ -110,6 +125,7 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
             "ungrouped": ungrouped,
             "ungrouped_label": ungrouped_label,
             "plant_count": plant_count,
+            "ai_logs": ai_logs,
             "msg": msg,
             "err": err,
         },

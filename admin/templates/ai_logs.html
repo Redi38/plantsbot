@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+  <a class="back" href="/">← Все пользователи</a>
+  <h1>Логи ИИ-агента</h1>
+  <p class="muted">Последние {{ entries|length }} обращений пользователей к свободному тексту — что написали и что распознал агент. Полезно для доработки системного промпта.</p>
+
+  {% if not entries %}
+    <p class="empty">Пока обращений не было.</p>
+  {% else %}
+    <ul class="ai-logs">
+      {% for log, user in entries %}
+        <li class="ai-log">
+          <div class="ai-log-top">
+            {% if user %}
+              <a href="/users/{{ user.id }}">{{ user.display_name }}</a>
+            {% else %}
+              <span class="muted">Пользователь #{{ log.user_id }} (удалён)</span>
+            {% endif %}
+            <span class="muted">{{ log.created_at.strftime("%d.%m.%Y %H:%M") }}</span>
+          </div>
+          <p class="ai-log-text">«{{ log.user_text }}»</p>
+          {% if log.error %}
+            <span class="ai-log-badge ai-log-badge--error">ошибка</span>
+            <p class="ai-log-error">{{ log.error }}</p>
+          {% else %}
+            <span class="ai-log-badge {% if log.action == 'unknown' or not log.action %}ai-log-badge--unknown{% endif %}">
+              {{ log.action or "unknown" }}
+            </span>
+            {% if log.plant_name or log.group_name or log.comment %}
+              <div class="ai-log-meta">
+                {% if log.plant_name %}<span>🌱 {{ log.plant_name }}</span>{% endif %}
+                {% if log.group_name %}<span>📁 {{ log.group_name }}</span>{% endif %}
+                {% if log.comment %}<span>💬 {{ log.comment }}</span>{% endif %}
+              </div>
+            {% endif %}
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

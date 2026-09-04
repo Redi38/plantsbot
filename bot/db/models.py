@@ -33,6 +33,29 @@ class User(Base):
         return f"Пользователь #{self.telegram_id}"
 
 
+class AiLog(Base):
+    """Запись одного обращения пользователя к ИИ-агенту (свободный текст,
+    не команда) — что спросили и что агент понял/ответил. Нужно для
+    админки: смотреть реальные формулировки пользователей и промахи
+    распознавания, чтобы дорабатывать системный промпт ai_service.
+    user_id хранится без ForeignKey/CASCADE намеренно: лог должен
+    переживать удаление пользователя (delete_user_data чистит только
+    users/groups/plants), чтобы история для анализа не терялась вместе
+    с пользователем."""
+
+    __tablename__ = "ai_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(index=True)
+    user_text: Mapped[str] = mapped_column(Text)
+    action: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    plant_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    group_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+
 class Group(Base):
     __tablename__ = "groups"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_group_user_name"),)
