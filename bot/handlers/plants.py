@@ -45,6 +45,54 @@ async def _plants_for_token(session, user_id: int, token: str) -> list:
     return list(group.plants) if group else []
 
 
+PLANT_PICK_PAGE_SIZE = 30
+
+
+def _paginate(items: list, page: int, page_size: int) -> tuple[list, int, int]:
+    """Режет items на страницу нужного размера. page зажимается в
+    допустимый диапазон [1, total_pages] — так безопаснее, чем падать
+    на некорректном номере страницы из старого/чужого callback_data."""
+    total_pages = max(1, (len(items) + page_size - 1) // page_size)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * page_size
+    return items[start : start + page_size], page, total_pages
+
+
+def _plant_pick_keyboard(
+    item_prefix: str,
+    page_prefix: str,
+    token: str,
+    items_page: list,
+    page: int,
+    total_pages: int,
+    back_data: str,
+):
+    """Клавиатура выбора растения из списка (для удаления/изменения) —
+    список растений на текущей странице, под ним пагинация (если страниц
+    больше одной), а под пагинацией — "Назад" и "Отмена". При 200+
+    растениях без пагинации клавиатура получалась настолько большой, что
+    Telegram не мог её нормально отрисовать — растения просто не
+    отображались."""
+    builder = InlineKeyboardBuilder()
+    for plant in items_page:
+        builder.button(text=plant.name, callback_data=f"{item_prefix}:{token}:{plant.id}", style="danger")
+    row_sizes = [1] * len(items_page)
+
+    if total_pages > 1:
+        prev_page = page - 1 if page > 1 else total_pages
+        next_page = page + 1 if page < total_pages else 1
+        builder.button(text="◀️", callback_data=f"{page_prefix}:{token}:{prev_page}", style="primary")
+        builder.button(text=f"{page}/{total_pages}", callback_data="list_noop", style="primary")
+        builder.button(text="▶️", callback_data=f"{page_prefix}:{token}:{next_page}", style="primary")
+        row_sizes.append(3)
+
+    builder.button(text="⬅️ Назад", callback_data=back_data, style="primary")
+    row_sizes.append(2)
+
+    builder.adjust(*row_sizes)
+    return builder.as_markup()
+
+
 # ---------- Добавление ----------
 
 def _cancel_keyboard() -> InlineKeyboardBuilder:
@@ -127,9 +175,6 @@ async def _proceed_after_group(
 async def cmd_add(message: Message, state: FSMContext) -> None:
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
-        # Предыдущая подсказка о добавлении (из этого же или другого
-        # входа — повторное нажатие "Добавить", либо переход из списка)
-        # больше не актуальна — убираем её, чтобы не копилась в чате.
         try:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
         except TelegramBadRequest:
@@ -147,9 +192,6 @@ async def lgadd_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     old_msg_id = await begin_dialog(state)
     if old_msg_id and old_msg_id != callback.message.message_id:
-        # Сценарий добавления уже был начат откуда-то ещё (повторное
-        # нажатие "Добавить" из reply-клавы и т.п.) — убираем старую
-        # подсказку, чтобы не копилась в чате.
         try:
             await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=old_msg_id)
         except TelegramBadRequest:
@@ -183,13 +225,9 @@ async def add_force(callback: CallbackQuery, state: FSMContext, user_id: int) ->
     data = await state.get_data()
 
     if "group_id" in data:
-        # Группа была известна ещё до проверки (добавление из
-        # конкретного списка) — сразу переходим к комментарию.
         await _ask_comment(callback, state)
         return
 
-    # Дубль найден сразу по названию (reply-кнопка "Добавить"), группа
-    # ещё не выбрана — продолжаем обычный шаг выбора группы.
     await _show_group_choice(callback, state, user_id)
 
 
@@ -205,9 +243,6 @@ async def add_name(message: Message, state: FSMContext, user_id: int) -> None:
             existing = None
         else:
             group_id = None
-            # Проверяем повтор сразу по названию (среди всех групп),
-            # ещё до того, как спросить группу — это самый ранний
-            # момент, когда проверка вообще имеет смысл в этом сценарии.
             existing = await crud.find_plant_by_name_any_group(session, user_id, name)
 
     if "preset_group_id" in data:
@@ -291,23 +326,42 @@ async def cancel_callback(callback: CallbackQuery) -> None:
 
 # ---------- Удаление растения из конкретного списка ----------
 
-@router.callback_query(F.data.startswith("lgdel:"))
-async def lgdel_pick(callback: CallbackQuery, user_id: int) -> None:
-    token = callback.data.split(":", 1)[1]
+async def _show_plant_pick(
+    callback: CallbackQuery, user_id: int, token: str, page: int, *, action: str, prompt: str
+) -> None:
+    """Показывает страницу выбора растения для удаления ('del') или
+    изменения ('edit') из списка token. Общая для lgdel*/lgedit*, чтобы
+    пагинация и текст кнопок не расходились между двумя похожими флоу."""
     async with get_session() as session:
         plants = await _plants_for_token(session, user_id, token)
 
-    await callback.answer()
     if not plants:
         await callback.answer("В этом списке пока нет растений", show_alert=True)
         return
 
-    builder = InlineKeyboardBuilder()
-    for plant in plants:
-        builder.button(text=plant.name, callback_data=f"lgpdel:{token}:{plant.id}", style="danger")
-    builder.button(text="⬅️ Назад", callback_data=f"lg:{token}", style="primary")
-    builder.adjust(1)
-    await callback.message.edit_text("🗑 Какое растение удалить?", reply_markup=builder.as_markup())
+    item_prefix = "lgpdel" if action == "del" else "lgpedit"
+    page_prefix = "lgdelpage" if action == "del" else "lgeditpage"
+
+    items_page, page, total_pages = _paginate(plants, page, PLANT_PICK_PAGE_SIZE)
+    kb = _plant_pick_keyboard(item_prefix, page_prefix, token, items_page, page, total_pages, back_data=f"lg:{token}")
+    try:
+        await callback.message.edit_text(prompt, reply_markup=kb)
+    except TelegramBadRequest:
+        pass
+
+
+@router.callback_query(F.data.startswith("lgdel:"))
+async def lgdel_pick(callback: CallbackQuery, user_id: int) -> None:
+    token = callback.data.split(":", 1)[1]
+    await callback.answer()
+    await _show_plant_pick(callback, user_id, token, 1, action="del", prompt="🗑 Какое растение удалить?")
+
+
+@router.callback_query(F.data.startswith("lgdelpage:"))
+async def lgdel_page(callback: CallbackQuery, user_id: int) -> None:
+    _, token, page = callback.data.split(":", 2)
+    await callback.answer()
+    await _show_plant_pick(callback, user_id, token, int(page), action="del", prompt="🗑 Какое растение удалить?")
 
 
 @router.callback_query(F.data.startswith("lgpdel:"))
@@ -340,20 +394,15 @@ async def lgpdel_confirm(callback: CallbackQuery, user_id: int) -> None:
 @router.callback_query(F.data.startswith("lgedit:"))
 async def lgedit_pick(callback: CallbackQuery, user_id: int) -> None:
     token = callback.data.split(":", 1)[1]
-    async with get_session() as session:
-        plants = await _plants_for_token(session, user_id, token)
-
     await callback.answer()
-    if not plants:
-        await callback.answer("В этом списке пока нет растений", show_alert=True)
-        return
+    await _show_plant_pick(callback, user_id, token, 1, action="edit", prompt="✏️ Какое растение изменить?")
 
-    builder = InlineKeyboardBuilder()
-    for plant in plants:
-        builder.button(text=plant.name, callback_data=f"lgpedit:{token}:{plant.id}", style="danger")
-    builder.button(text="⬅️ Назад", callback_data=f"lg:{token}", style="primary")
-    builder.adjust(1)
-    await callback.message.edit_text("✏️ Какое растение изменить?", reply_markup=builder.as_markup())
+
+@router.callback_query(F.data.startswith("lgeditpage:"))
+async def lgedit_page(callback: CallbackQuery, user_id: int) -> None:
+    _, token, page = callback.data.split(":", 2)
+    await callback.answer()
+    await _show_plant_pick(callback, user_id, token, int(page), action="edit", prompt="✏️ Какое растение изменить?")
 
 
 @router.callback_query(F.data.startswith("lgpedit:"))

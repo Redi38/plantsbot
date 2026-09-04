@@ -46,12 +46,12 @@ def _group_menu_keyboard(groups: list[Group], ungrouped_label: str | None):
         count = len(ungrouped_label[1])
         total += count
         builder.button(text=f"{ungrouped_label[0]} ({count})", callback_data="lg:none")
-    builder.button(text=f"📋 Показать всё ({total})", callback_data="lg:all", style="primary")
+    builder.button(text=f"📋 Показать все ({total})", callback_data="lg:all", style="primary")
     builder.adjust(1)
     return builder.as_markup()
 
 
-async def _group_menu_text_and_kb(user_id: int):
+async def group_menu_text_and_kb(user_id: int):
     async with get_session() as session:
         groups, ungrouped = await crud.get_full_tree(session, user_id)
         if not groups and not ungrouped:
@@ -68,13 +68,13 @@ async def cmd_list(message: Message, state: FSMContext, user_id: int) -> None:
             await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
         except TelegramBadRequest:
             pass
-    text, kb = await _group_menu_text_and_kb(user_id)
+    text, kb = await group_menu_text_and_kb(user_id)
     await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "lgmenu")
 async def list_menu_back(callback: CallbackQuery, user_id: int) -> None:
-    text, kb = await _group_menu_text_and_kb(user_id)
+    text, kb = await group_menu_text_and_kb(user_id)
     await callback.answer()
     try:
         await callback.message.edit_text(text, reply_markup=kb)
@@ -117,6 +117,7 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
 
     def add_rename_group():
         builder.button(text="✏️ Переименовать группу", callback_data=f"lgrename:{token}", style="primary")
+        builder.button(text="🗑 Удалить группу", callback_data=f"lggdel:{token}", style="danger")
 
     def add_back():
         builder.button(text="⬅️ Назад", callback_data="lgmenu", style="primary")
@@ -139,7 +140,7 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
 
         if is_real_group:
             add_rename_group()
-            row_sizes.append(1)
+            row_sizes.append(2)
 
         add_back()
         row_sizes.append(1)
