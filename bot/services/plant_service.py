@@ -18,16 +18,27 @@ async def add_plant(
     user_id: int,
     name: str,
     group_name: str | None = None,
+    group_id: int | None = None,
     comment: str | None = None,
+    force: bool = False,
 ) -> Plant:
-    group_id = None
-    if group_name:
+    """group_id, если передан, имеет приоритет над group_name — используется,
+    когда группа уже точно известна (выбрана пользователем кнопкой или найдена
+    точным совпадением), чтобы не гонять её ещё раз через get_or_create_group.
+
+    force=True полностью отключает проверку на дубль — используется, когда
+    пользователь уже подтвердил добавление повторного экземпляра раньше
+    (например через "➕ Всё равно добавить"), чтобы та же проверка не
+    сработала ещё раз для конкретной группы, выбранной уже ПОСЛЕ этого
+    подтверждения."""
+    if group_id is None and group_name:
         group, _ = await crud.get_or_create_group(session, user_id, group_name)
         group_id = group.id
 
-    existing = await crud.find_plant_by_name(session, user_id, name, group_id)
-    if existing:
-        raise DuplicatePlantError(existing)
+    if not force:
+        existing = await crud.find_plant_by_name(session, user_id, name, group_id)
+        if existing:
+            raise DuplicatePlantError(existing)
 
     plant = await crud.create_plant(session, user_id, name, group_id=group_id, comment=comment)
     await session.commit()

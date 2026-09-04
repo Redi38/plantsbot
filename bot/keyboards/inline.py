@@ -10,13 +10,19 @@ def groups_keyboard(
     allow_none: bool = True,
     none_label: str = "Без группы",
     cancel_data: str | None = None,
+    new_label: str = "➕ Новая группа",
+    allow_new: bool = True,
+    back_data: str | None = None,
 ) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for group in groups:
         builder.button(text=group.name, callback_data=f"{prefix}:{group.id}", style="primary")
     if allow_none:
         builder.button(text=none_label, callback_data=f"{prefix}:none", style="primary")
-    builder.button(text="➕ Новая группа", callback_data=f"{prefix}:new", style="primary")
+    if allow_new:
+        builder.button(text=new_label, callback_data=f"{prefix}:new", style="primary")
+    if back_data:
+        builder.button(text="⬅️ Назад", callback_data=back_data, style="danger")
     if cancel_data:
         builder.button(text="❌ Отмена", callback_data=cancel_data, style="danger")
     builder.adjust(1)

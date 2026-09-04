@@ -1,15 +1,5 @@
 """
 Лёгкий ИИ-агент для команд вида "добавь алоказию полли в алоказии, полила вчера".
-
-Работает с любым OpenAI-совместимым API, в т.ч. NVIDIA NIM
-(https://integrate.api.nvidia.com/v1). Особенности NIM, которые здесь учтены:
-
-- не все модели на NIM поддерживают response_format={"type": "json_object"} —
-  при ошибке автоматически повторяем запрос без него;
-- некоторые модели всё равно оборачивают ответ в ```json ... ``` несмотря
-  на просьбу в промпте — вырезаем это перед парсингом;
-- у части моделей (например ризонинг-модели) в ответе может быть блок
-  рассуждений перед самим JSON — вытаскиваем JSON-объект по фигурным скобкам.
 """
 
 import asyncio
@@ -20,23 +10,46 @@ import aiohttp
 
 from bot.config import config
 
-SYSTEM_PROMPT = """Ты помощник бота для учёта комнатных растений.
+SYSTEM_PROMPT_TEMPLATE = """Ты помощник бота для учёта комнатных растений.
 Пользователь пишет свободным текстом, что он хочет сделать.
 Определи намерение и извлеки данные. Отвечай ТОЛЬКО валидным JSON, без пояснений, \
 без markdown-разметки, без блоков кода — просто голый JSON-объект.
 
 Формат ответа:
-{
+{{
   "action": "add" | "delete" | "unknown",
   "plant_name": "название растения (с заглавной буквы) или null",
-  "group_name": "название группы или null — определи по ботаническому роду, если возможно \
-(например 'Алоказия Полли' -> группа 'Алоказии', 'Хавортия' -> 'Суккуленты'); \
-если по контексту непонятно — верни null",
+  "group_name": "название группы или null",
   "comment": "комментарий, если пользователь его указал, иначе null"
-}
-
+}}
+{groups_block}
 Если не можешь понять намерение — action: "unknown".
 """
+
+_GROUPS_BLOCK_TEMPLATE = """
+У пользователя уже есть такие группы растений: {groups_list}.
+Если добавляемое растение по смыслу (виду/роду) подходит к одной из них — \
+верни её название ТОЧНО ТАК, КАК ОНО НАПИСАНО В ЭТОМ СПИСКЕ, посимвольно, \
+не переводя и не меняя число/падеж. Не изобретай новую группу, если подходящая уже есть.
+Если ни одна группа не подходит и стоит завести новую — предложи короткое \
+название по ботаническому роду (например 'Алоказия Полли' -> 'Алоказии'). \
+Если группу определить не получается — верни null.
+"""
+
+_NO_GROUPS_BLOCK = """
+У пользователя пока нет ни одной группы растений. Если понятно, что растение \
+относится к определённому ботаническому роду — предложи короткое название \
+группы по этому роду (например 'Алоказия Полли' -> 'Алоказии'). Если непонятно \
+— верни null.
+"""
+
+
+def _build_system_prompt(existing_groups: list[str] | None) -> str:
+    if existing_groups:
+        groups_block = _GROUPS_BLOCK_TEMPLATE.format(groups_list=", ".join(f"«{g}»" for g in existing_groups))
+    else:
+        groups_block = _NO_GROUPS_BLOCK
+    return SYSTEM_PROMPT_TEMPLATE.format(groups_block=groups_block)
 
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
@@ -69,7 +82,7 @@ def _extract_json(content: str) -> dict:
     raise json.JSONDecodeError("no JSON object found", cleaned, 0)
 
 
-async def _call_api(user_text: str, use_json_mode: bool) -> str:
+async def _call_api(user_text: str, use_json_mode: bool, system_prompt: str) -> str:
     headers = {
         "Authorization": f"Bearer {config.ai_api_key}",
         "Content-Type": "application/json",
@@ -77,7 +90,7 @@ async def _call_api(user_text: str, use_json_mode: bool) -> str:
     payload = {
         "model": config.ai_model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_text},
         ],
         "temperature": 0,
@@ -108,18 +121,18 @@ async def _call_api(user_text: str, use_json_mode: bool) -> str:
     return data["choices"][0]["message"]["content"]
 
 
-async def parse_intent(user_text: str) -> dict:
+async def parse_intent(user_text: str, existing_groups: list[str] | None = None) -> dict:
     if not config.ai_enabled:
         raise AIServiceUnavailable("ИИ-агент отключён (AI_ENABLED=false)")
 
+    system_prompt = _build_system_prompt(existing_groups)
+
     try:
-        content = await _call_api(user_text, use_json_mode=True)
+        content = await _call_api(user_text, use_json_mode=True, system_prompt=system_prompt)
     except AIServiceTimeout:
-        # сеть не работает — повторный запрос ничего не изменит, сразу пробрасываем
         raise
     except AIServiceUnavailable:
-        # модель на NIM может не поддерживать response_format — пробуем без него
-        content = await _call_api(user_text, use_json_mode=False)
+        content = await _call_api(user_text, use_json_mode=False, system_prompt=system_prompt)
 
     try:
         return _extract_json(content)
