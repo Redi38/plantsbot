@@ -8,11 +8,11 @@
   {% endif %}
 
   {% for c in cards %}
-    <div class="card">
+    <a href="/users/{{ c.user.id }}" class="card card-link">
       <div class="card-header">
-        <h2><a href="/users/{{ c.user.id }}">{{ c.user.display_name }}</a></h2>
+        <h2>{{ c.user.display_name }}</h2>
         <span class="muted">{{ c.group_count }} групп · {{ c.plant_count }} растений</span>
       </div>
-    </div>
+    </a>
   {% endfor %}
 {% endblock %}
