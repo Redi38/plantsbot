@@ -15,7 +15,22 @@
      (после выбора — снова экран №2, но уже с новой группой)
 
 Ни на каком шаге новая группа автоматически не создаётся — только выбор
-между уже существующими группами или "Без группы".
+между уже существующими группами или "Без группы" (кроме случая, когда
+пользователь сам явно назвал ещё не существующую группу — тогда она
+предлагается к созданию прямо на экране №2 и создаётся по факту "Добавить").
+
+Удаление растения через ИИ тоже всегда идёт через подтверждение:
+
+  1) Если совпадение по имени одно — сразу "Точно удалить «X»?" [Удалить] [Отмена]
+  2) Если совпадений несколько — сперва список на выбор (по группам, если
+     они лежат в разных группах, иначе по комментарию/номеру), затем то же
+     подтверждение "Точно удалить «X»?" для выбранного растения.
+
+Удаление ГРУППЫ через ИИ переиспользует уже существующий ручной флоу из
+groups.py (те же callback_data lggdel*/lg:) — бот только находит группу по
+имени и показывает то же меню "как поступить с растениями внутри неё"
+(перенести или удалить вместе с группой), никакой отдельной логики под
+это здесь не заведено.
 """
 
 import logging
@@ -43,6 +58,11 @@ class AIAdd(StatesGroup):
     confirm_group = State()      # "добавить «X» в группу «Y»?"
     pick_group = State()         # список всех групп на выбор
     new_group_name = State()     # ввод названия новой группы
+
+
+class AIDelete(StatesGroup):
+    pick_plant = State()      # несколько совпадений по имени — какое удалить
+    confirm_delete = State()  # "точно удалить «X»?"
 
 
 def _success_message(plant_name: str, group_name: str | None, group_id: int | None) -> tuple[str, InlineKeyboardBuilder]:
@@ -100,6 +120,38 @@ def _duplicate_keyboard() -> InlineKeyboardBuilder:
     return builder
 
 
+def _confirm_delete_keyboard() -> InlineKeyboardBuilder:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🗑 Удалить", callback_data="aidelconfirm", style="danger")
+    builder.button(text="❌ Отмена", callback_data="aidelcancel", style="danger")
+    builder.adjust(1)
+    return builder
+
+
+def _delete_pick_label(plant, group_name_by_id: dict[int, str], multi_group: bool, index: int) -> str:
+    """Подпись кнопки для выбора конкретного совпадения при удалении.
+    Если совпадения лежат в разных группах — показываем группу (это и
+    отличает их друг от друга), иначе группа у всех одна и не помогает
+    выбрать, так что показываем комментарий, а если и его нет —
+    порядковый номер, чтобы кнопки не были неотличимы."""
+    if multi_group:
+        group_label = group_name_by_id.get(plant.group_id, "Без группы")
+        return f"{plant.name} — {group_label}"
+    if plant.comment:
+        return f"{plant.name} ({plant.comment})"
+    return f"{plant.name} #{index}"
+
+
+def _delete_pick_keyboard(matches: list, group_name_by_id: dict[int, str], multi_group: bool) -> InlineKeyboardBuilder:
+    builder = InlineKeyboardBuilder()
+    for i, plant in enumerate(matches, start=1):
+        label = _delete_pick_label(plant, group_name_by_id, multi_group, i)
+        builder.button(text=label, callback_data=f"aidelpick:{plant.id}", style="danger")
+    builder.button(text="❌ Отмена", callback_data="aidelcancel", style="danger")
+    builder.adjust(1)
+    return builder
+
+
 async def _reply(reply_target: Message | CallbackQuery, text: str, markup) -> None:
     if isinstance(reply_target, CallbackQuery):
         await reply_target.message.edit_text(text, reply_markup=markup)
@@ -114,19 +166,32 @@ async def _show_confirm_group(
     name: str,
     comment: str | None,
     group_id: int | None,
+    new_group_name: str | None = None,
     force: bool = False,
 ) -> None:
+    """group_id — существующая группа. new_group_name — группа, которую
+    явно назвал (или предложил ИИ) пользователь, но её ещё нет в базе:
+    показываем это в тексте подтверждения, а саму группу создаём только
+    по факту нажатия "Добавить" (см. ai_confirm_add), чтобы отмена на
+    этом шаге не оставляла в базе пустую группу."""
     group_name = None
     if group_id is not None:
         async with get_session() as session:
             group = await crud.get_group(session, group_id, user_id)
         group_name = group.name if group else None
         group_id = group.id if group else None  # группу могли удалить между шагами
+        if group_id is None:
+            new_group_name = None  # группу удалили — раз уж на то пошло, сбрасываем и подсказку
 
     await state.set_state(AIAdd.confirm_group)
-    await state.update_data(name=name, comment=comment, group_id=group_id, force=force)
+    await state.update_data(name=name, comment=comment, group_id=group_id, new_group_name=new_group_name, force=force)
 
-    where = f"группу «{group_name}»" if group_name else "«Без группы»"
+    if group_id is not None:
+        where = f"группу «{group_name}»"
+    elif new_group_name:
+        where = f"новую группу «{new_group_name}» (создам её)"
+    else:
+        where = "«Без группы»"
     text = f"🌱 Добавить «{name}» в {where}?"
     await _reply(reply_target, text, _confirm_group_keyboard().as_markup())
 
@@ -145,6 +210,14 @@ async def _show_pick_group(reply_target: Message | CallbackQuery, state: FSMCont
         back_data="aibacktoconfirm",
     )
     await _reply(reply_target, "📁 В какую группу добавить?", markup)
+
+
+async def _show_confirm_delete(
+    reply_target: Message | CallbackQuery, state: FSMContext, plant_id: int, plant_name: str
+) -> None:
+    await state.set_state(AIDelete.confirm_delete)
+    await state.update_data(plant_id=plant_id)
+    await _reply(reply_target, f"🗑 Точно удалить «{plant_name}»?", _confirm_delete_keyboard().as_markup())
 
 
 @router.message(StateFilter(None), F.text)
@@ -186,6 +259,9 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
         plant_name = intent["plant_name"]
         comment = intent.get("comment")
         matched_group = _match_group(existing_groups, intent.get("group_name"))
+        new_group_name = None
+        if not matched_group and intent.get("group_name"):
+            new_group_name = intent["group_name"].strip() or None
 
         async with get_session() as session:
             existing_plant = await crud.find_plant_by_name_any_group(session, user_id, plant_name)
@@ -196,6 +272,7 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
                 name=plant_name,
                 comment=comment,
                 group_id=matched_group.id if matched_group else None,
+                new_group_name=new_group_name,
             )
             await message.answer(
                 f"⚠️ «{existing_plant.name}» уже есть в списке. Добавить ещё один экземпляр?",
@@ -204,8 +281,59 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
             return
 
         await _show_confirm_group(
-            message, state, user_id, plant_name, comment, matched_group.id if matched_group else None
+            message,
+            state,
+            user_id,
+            plant_name,
+            comment,
+            matched_group.id if matched_group else None,
+            new_group_name=new_group_name,
         )
+        return
+
+    if action == "delete_group" and intent.get("group_name"):
+        group_name = intent["group_name"].strip()
+        if not group_name:
+            await message.answer("Не поняла, какую группу удалить 🤔 Используй кнопки внизу экрана")
+            return
+
+        async with get_session() as session:
+            group = await crud.get_group_by_name(session, user_id, group_name)
+
+        if group is None:
+            await message.answer(f"Не нашла группу «{group_name}». Проверь 📋 Список")
+            return
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📦 Удалить, растения переместить", callback_data=f"lggdelmove:{group.id}", style="primary")
+        builder.button(text="🗑 Удалить вместе с растениями", callback_data=f"lggdelwith:{group.id}", style="danger")
+        builder.button(text="⬅️ Назад", callback_data=f"lg:{group.id}", style="primary")
+        builder.adjust(1)
+        await message.answer(
+            f"🗑 Удалить группу «{group.name}» — как поступить с растениями внутри неё?",
+            reply_markup=builder.as_markup(),
+        )
+        return
+
+    if action == "create_group" and intent.get("group_name"):
+        group_name = intent["group_name"].strip()
+        if not group_name:
+            await message.answer("Не поняла, как назвать группу 🤔 Используй кнопки внизу экрана")
+            return
+
+        async with get_session() as session:
+            existing = await crud.get_group_by_name(session, user_id, group_name)
+            if existing:
+                await message.answer(f"📁 Группа «{existing.name}» уже есть — ничего не меняла")
+                return
+            group = await crud.create_group(session, user_id, group_name)
+            await session.commit()
+            group_id = group.id
+            created_name = group.name
+
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📋 Список", callback_data=f"lg:{group_id}", style="primary")
+        await message.answer(f"📁 Создала группу «{created_name}»", reply_markup=builder.as_markup())
         return
 
     if action == "delete" and intent.get("plant_name"):
@@ -220,16 +348,18 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
                 f"Не нашла растение «{intent['plant_name']}». Проверь 📋 Список или удали вручную из списка"
             )
             return
-        if len(matches) > 1:
-            await message.answer(
-                f"Нашла несколько растений с именем «{intent['plant_name']}» — удали вручную из списка"
-            )
+
+        if len(matches) == 1:
+            await _show_confirm_delete(message, state, matches[0].id, matches[0].name)
             return
 
-        async with get_session() as session:
-            plant = await crud.get_plant(session, matches[0].id, user_id)
-            await plant_service.remove_plant(session, plant)
-        await message.answer(f"🗑 Удалила «{matches[0].name}»")
+        group_name_by_id = {g.id: g.name for g in groups}
+        multi_group = len({p.group_id for p in matches}) > 1
+        await state.set_state(AIDelete.pick_plant)
+        await message.answer(
+            f"Нашла несколько растений «{intent['plant_name']}» — какое удалить?",
+            reply_markup=_delete_pick_keyboard(matches, group_name_by_id, multi_group).as_markup(),
+        )
         return
 
     await message.answer(
@@ -246,7 +376,14 @@ async def ai_add_force(callback: CallbackQuery, state: FSMContext, user_id: int)
     await callback.answer()
     data = await state.get_data()
     await _show_confirm_group(
-        callback, state, user_id, data["name"], data.get("comment"), data.get("group_id"), force=True
+        callback,
+        state,
+        user_id,
+        data["name"],
+        data.get("comment"),
+        data.get("group_id"),
+        new_group_name=data.get("new_group_name"),
+        force=True,
     )
 
 
@@ -254,8 +391,17 @@ async def ai_add_force(callback: CallbackQuery, state: FSMContext, user_id: int)
 async def ai_confirm_add(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
     await callback.answer()
     data = await state.get_data()
+    group_id = data.get("group_id")
+    new_group_name = data.get("new_group_name")
+
+    if group_id is None and new_group_name:
+        async with get_session() as session:
+            group, _ = await crud.get_or_create_group(session, user_id, new_group_name)
+            await session.commit()
+            group_id = group.id
+
     text, markup = await _perform_add(
-        user_id, data["name"], data.get("group_id"), data.get("comment"), force=data.get("force", False)
+        user_id, data["name"], group_id, data.get("comment"), force=data.get("force", False)
     )
     await state.clear()
     await callback.message.edit_text(text, reply_markup=markup)
@@ -304,7 +450,14 @@ async def ai_back_to_confirm(callback: CallbackQuery, state: FSMContext, user_id
     await callback.answer()
     data = await state.get_data()
     await _show_confirm_group(
-        callback, state, user_id, data["name"], data.get("comment"), data.get("group_id"), force=data.get("force", False)
+        callback,
+        state,
+        user_id,
+        data["name"],
+        data.get("comment"),
+        data.get("group_id"),
+        new_group_name=data.get("new_group_name"),
+        force=data.get("force", False),
     )
 
 
@@ -313,6 +466,46 @@ async def ai_back_to_confirm(callback: CallbackQuery, state: FSMContext, user_id
     F.data == "aicancel",
 )
 async def ai_cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await callback.answer("Отменено")
+    await callback.message.delete()
+
+
+@router.callback_query(StateFilter(AIDelete.pick_plant), F.data.startswith("aidelpick:"))
+async def ai_delete_pick(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    plant_id = int(callback.data.split(":", 1)[1])
+    await callback.answer()
+
+    async with get_session() as session:
+        plant = await crud.get_plant(session, plant_id, user_id)
+    if plant is None:
+        await state.clear()
+        await callback.message.edit_text("⚠️ Растение уже удалено, возможно, кем-то другим.")
+        return
+
+    await _show_confirm_delete(callback, state, plant.id, plant.name)
+
+
+@router.callback_query(StateFilter(AIDelete.confirm_delete), F.data == "aidelconfirm")
+async def ai_delete_confirm(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    await callback.answer()
+    data = await state.get_data()
+
+    async with get_session() as session:
+        plant = await crud.get_plant(session, data.get("plant_id"), user_id)
+        if plant is None:
+            await state.clear()
+            await callback.message.edit_text("⚠️ Растение уже удалено, возможно, кем-то другим.")
+            return
+        name = plant.name
+        await plant_service.remove_plant(session, plant)
+
+    await state.clear()
+    await callback.message.edit_text(f"🗑 Удалила «{name}»")
+
+
+@router.callback_query(StateFilter(AIDelete.pick_plant, AIDelete.confirm_delete), F.data == "aidelcancel")
+async def ai_delete_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.answer("Отменено")
     await callback.message.delete()
