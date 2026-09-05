@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db import crud
 from bot.db.models import Plant
+from bot.utils.fuzzy import fuzzy_find
 from bot.utils.text import split_long_text
 
 
@@ -120,3 +121,21 @@ async def render_pages(session: AsyncSession, user_id: int) -> list[str]:
                 pages.append(f"{list_header}\n\n{chunk}" if i == 0 else chunk)
 
     return pages
+
+
+async def find_plants_by_term(session: AsyncSession, user_id: int, term: str) -> list[Plant]:
+    """Ищет растения не по полному имени, а по "роду" — первому слову в
+    названии (например запрос "алоказии" должен найти и "Алоказия Полли",
+    и "Алоказия Одора"). Используется в ИИ-агенте для action="list", когда
+    group_name не совпал ни с одной реальной группой пользователя — то есть,
+    скорее всего, это не группа, а вид/род растений внутри уже существующих
+    групп или "без группы". Ручного аналога у этого поиска нет (вручную
+    можно только открыть готовую группу), поэтому namedtuple с CRUD-кнопками
+    сюда не нужен — только текст на просмотр."""
+    groups, ungrouped = await crud.get_full_tree(session, user_id)
+    all_plants = ungrouped[:] + [p for g in groups for p in g.plants]
+    return fuzzy_find(all_plants, term, key=lambda p: p.name.split()[0] if p.name.split() else p.name)
+
+
+def render_term_matches(term: str, matches: list[Plant]) -> str:
+    return _render_group_block(f'Похожие на "{term}"', matches)

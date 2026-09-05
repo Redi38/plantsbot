@@ -27,10 +27,12 @@ SYSTEM_PROMPT_TEMPLATE = """Ты помощник бота для учёта к�
 
 Формат ответа:
 {{
-  "action": "add" | "delete" | "delete_group" | "create_group" | "unknown",
+  "action": "add" | "delete" | "delete_group" | "create_group" | "rename_group" | "edit_plant" | "list" | "unknown",
   "plant_name": "название растения (с заглавной буквы) или null",
   "group_name": "название группы или null",
-  "comment": "комментарий, если пользователь его указал, иначе null"
+  "comment": "комментарий, если пользователь его указал, иначе null",
+  "new_name": "новое название — для rename_group (новое имя группы) или edit_plant (новое имя растения), иначе null",
+  "matched_plants": null или JSON-массив строк, например ["Alocasia Polly", "Alocasia Odora"] — см. ниже про action="list"
 }}
 {plants_block}
 action="delete_group" — когда пользователь просит удалить ЦЕЛИКОМ группу \
@@ -58,6 +60,41 @@ plant_name и comment — null. Если растение упомянуто в�
 (например "добавь алоэ в группу Суккуленты") — это action="add", а не \
 "create_group".
 {groups_block}
+
+action="rename_group" — когда пользователь просит переименовать существующую \
+группу (например "переименуй Суккуленты в Кактусы", "назови группу Алоказии \
+по-другому — Ароидные"). group_name — текущее (старое) название группы, \
+new_name — новое название. plant_name и comment — null.
+
+action="edit_plant" — когда пользователь просит изменить название или \
+комментарий уже существующего растения (например "переименуй алоэ вера в \
+алоэ", "у алоказии полли поменяй комментарий на пересадила вчера", "убери \
+комментарий у хавортии"). plant_name — растение, которое нужно найти (как \
+обычно, ТОЧНО как в списке существующих растений, см. выше). Если меняется \
+название — верни его в new_name, а comment оставь null. Если меняется \
+комментарий — верни его в comment (пустую строку "", если пользователь просит \
+именно убрать/очистить комментарий), а new_name оставь null. Это НЕ действие \
+"add" — растение уже есть, новое не создаётся.
+
+action="list" — когда пользователь просит показать список: либо весь \
+список, либо список конкретной группы/рода растений (например "покажи \
+список", "какие у меня растения", "дай список алоказий", "покажи все \
+суккуленты"). Если пользователь не уточнил, что именно показать — верни \
+group_name: null, покажется общее меню групп. Если уточнил конкретную \
+группу или род/вид растений — верни это слово как group_name (в любой \
+форме, как написал пользователь — падеж/число не важны). ВАЖНО: если это \
+не формальная группа, а род/вид (например "алоказии"), дополнительно \
+пройдись по списку существующих растений (см. ниже) и в matched_plants \
+верни ТОЧНЫЕ названия (как в списке) всех растений, которые относятся к \
+этому роду/виду — даже если название растения на другом языке или в другом \
+алфавите, чем запрос пользователя (например пользователь написал "алоказии" \
+по-русски, а в списке растение называется "Alocasia Polly" латиницей — это \
+всё равно совпадение, переведи/сопостави по смыслу, а не по буквам). \
+matched_plants — это JSON-массив строк (например ["Alocasia Polly", \
+"Alocasia Odora"]), НЕ строка и не текст-описание; если подходящих растений \
+нет — matched_plants: null (не пустая строка, не пустой текст). Для всех \
+остальных action matched_plants всегда null. plant_name и comment — null.
+
 Если не можешь понять намерение — action: "unknown".
 """
 
@@ -178,19 +215,35 @@ def _parse_retry_after(error_text: str) -> float:
 
 def _extract_json(content: str) -> dict:
     """Убирает markdown code fences и достаёт JSON-объект из ответа модели,
-    даже если вокруг него есть лишний текст (типично для reasoning-моделей на NIM)."""
+    даже если вокруг него есть лишний текст (типично для reasoning-моделей на NIM).
+    Также чинит самую частую поломку валидного на вид JSON от LLM — висячую
+    запятую перед закрывающей скобкой (`"a": 1,}` / `[1, 2,]`), которую сам
+    json.loads не переваривает."""
     cleaned = content.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
     cleaned = re.sub(r"\s*```$", "", cleaned)
 
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
+    def _try_parse(text: str) -> dict | None:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            fixed = re.sub(r",(\s*[}\]])", r"\1", text)
+            if fixed != text:
+                try:
+                    return json.loads(fixed)
+                except json.JSONDecodeError:
+                    return None
+            return None
+
+    result = _try_parse(cleaned)
+    if result is not None:
+        return result
 
     match = _JSON_OBJECT_RE.search(cleaned)
     if match:
-        return json.loads(match.group(0))
+        result = _try_parse(match.group(0))
+        if result is not None:
+            return result
 
     raise json.JSONDecodeError("no JSON object found", cleaned, 0)
 

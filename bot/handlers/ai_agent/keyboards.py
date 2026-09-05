@@ -42,3 +42,13 @@ def delete_pick_keyboard(matches: list, group_name_by_id: dict[int, str], multi_
     builder.button(text="❌ Отмена", callback_data="aidelcancel", style="danger")
     builder.adjust(1)
     return builder
+
+
+def edit_pick_keyboard(matches: list, group_name_by_id: dict[int, str], multi_group: bool) -> InlineKeyboardBuilder:
+    builder = InlineKeyboardBuilder()
+    for i, plant in enumerate(matches, start=1):
+        label = delete_pick_label(plant, group_name_by_id, multi_group, i)
+        builder.button(text=label, callback_data=f"aieditpick:{plant.id}", style="primary")
+    builder.button(text="❌ Отмена", callback_data="aieditcancel", style="danger")
+    builder.adjust(1)
+    return builder

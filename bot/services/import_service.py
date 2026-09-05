@@ -166,6 +166,25 @@ def render_preview_text(preview: list[PreviewGroup]) -> str:
     return "\n".join(lines)
 
 
+async def export_to_csv(session: AsyncSession, user_id: int) -> str:
+    """Выгружает все растения пользователя в CSV того же формата, что
+    принимает parse_csv (group,name,comment) — чтобы экспорт можно было
+    без изменений тут же импортировать обратно (себе или другому
+    пользователю бота)."""
+    groups, ungrouped = await crud.get_full_tree(session, user_id)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["group", "name", "comment"])
+    for group in groups:
+        for plant in group.plants:
+            writer.writerow([group.name, plant.name, plant.comment or ""])
+    for plant in ungrouped:
+        writer.writerow(["", plant.name, plant.comment or ""])
+
+    return buffer.getvalue()
+
+
 async def commit_import(session: AsyncSession, user_id: int, preview: list[PreviewGroup]) -> tuple[int, int]:
     """Сохраняет предпросмотренный импорт в БД. Возвращает (добавлено, пропущено_как_дубли)."""
     count = 0

@@ -1,8 +1,11 @@
+from datetime import datetime, timezone
+
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db.database import get_session
 from bot.keyboards.inline import confirm_keyboard
@@ -26,6 +29,10 @@ async def cmd_import(message: Message, state: FSMContext) -> None:
     if old_msg_id:
         await safe_delete_message(message.bot, message.chat.id, old_msg_id)
     await state.set_state(ImportFlow.waiting_input)
+
+    export_builder = InlineKeyboardBuilder()
+    export_builder.button(text="📤 Экспорт", callback_data="export_plants", style="primary")
+
     await message.answer(
         "📥 Пришли список растений одним из способов:\n\n"
         "1️⃣ CSV-файл с колонками <code>group,name,comment</code>\n\n"
@@ -35,7 +42,9 @@ async def cmd_import(message: Message, state: FSMContext) -> None:
         "- Алоказия Одора\n\n"
         "Суккуленты:\n"
         "- Хавортия</code>\n\n"
-        "Можешь попросить ChatGPT сформировать список именно в таком виде."
+        "Можешь попросить ChatGPT сформировать список именно в таком виде.\n\n"
+        "Или выгрузи свои текущие растения в CSV кнопкой ниже 👇",
+        reply_markup=export_builder.as_markup(),
     )
 
 
@@ -77,6 +86,25 @@ async def _process_import(message: Message, state: FSMContext, user_id: int, raw
         chunks[-1],
         reply_markup=confirm_keyboard(yes_data="import_confirm", no_data="import_cancel"),
     )
+
+
+@router.callback_query(F.data == "export_plants")
+async def export_plants(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    async with get_session() as session:
+        csv_text = await import_service.export_to_csv(session, user_id)
+
+    if csv_text.count("\n") <= 1:
+        await callback.answer("У тебя пока нет растений для экспорта", show_alert=True)
+        return
+
+    file = BufferedInputFile(
+        csv_text.encode("utf-8-sig"),
+        filename=f"plants_{datetime.now(timezone.utc):%Y-%m-%d}.csv",
+    )
+    await callback.answer()
+    await state.clear()
+    await safe_delete_message(callback.bot, callback.message.chat.id, callback.message.message_id)
+    await callback.bot.send_document(callback.message.chat.id, file)
 
 
 @router.message(Command("cancel_import"), StateFilter(ImportFlow.waiting_input))

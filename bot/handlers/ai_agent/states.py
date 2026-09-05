@@ -11,3 +11,7 @@ class AIAdd(StatesGroup):
 class AIDelete(StatesGroup):
     pick_plant = State()      # несколько совпадений по имени — какое удалить
     confirm_delete = State()  # "точно удалить «X»?"
+
+
+class AIEdit(StatesGroup):
+    pick_plant = State()  # несколько совпадений по имени — какое изменить
