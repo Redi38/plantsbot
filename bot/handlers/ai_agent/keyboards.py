@@ -20,14 +20,6 @@ def duplicate_keyboard() -> InlineKeyboardBuilder:
     return builder
 
 
-def confirm_delete_keyboard() -> InlineKeyboardBuilder:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Удалить", callback_data="aidelconfirm", style="danger")
-    builder.button(text="❌ Отмена", callback_data="aidelcancel", style="danger")
-    builder.adjust(1)
-    return builder
-
-
 def delete_pick_label(plant, group_name_by_id: dict[int, str], multi_group: bool, index: int) -> str:
     """Подпись кнопки для выбора конкретного совпадения при удалении.
     Если совпадения лежат в разных группах — показываем группу (это и

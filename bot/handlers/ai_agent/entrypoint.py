@@ -49,6 +49,16 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
             existing_plants=existing_plant_names,
             user_id=user_id,
         )
+    except ai_service.AIServiceRateLimited as exc:
+        logger.warning("AI-агент: провайдер превысил лимит запросов: %s", exc)
+        async with get_session() as session:
+            await crud.create_ai_log(session, user_id, message.text, error=str(exc))
+            await session.commit()
+        await message.answer(
+            "⏳ Сейчас слишком много запросов к ИИ, попробуй ещё раз через минуту "
+            "или используй кнопки ➕ Добавить / 📋 Список внизу экрана."
+        )
+        return
     except ai_service.AIServiceUnavailable as exc:
         logger.warning("AI-агент недоступен: %s", exc)
         async with get_session() as session:
@@ -85,7 +95,7 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
         await handle_create_group_intent(message, user_id, intent)
         return
 
-    if action == "delete" and intent.get("plant_name"):
+    if action == "delete" and (intent.get("plant_name") or intent.get("group_name")):
         await handle_delete_intent(message, state, user_id, intent, groups=groups, ungrouped=ungrouped)
         return
 

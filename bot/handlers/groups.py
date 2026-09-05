@@ -1,5 +1,4 @@
 from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,10 +8,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db import crud
 from bot.db.database import get_session
 from bot.handlers.list_view import group_menu_text_and_kb, send_group_page
-from bot.keyboards.inline import groups_keyboard
+from bot.keyboards.inline import confirm_delete_keyboard, groups_keyboard
 from bot.keyboards.reply import MENU_BUTTONS
 from bot.services import group_service, plant_service
-from bot.utils.chat import pop_tracked, render, track_callback
+from bot.utils.chat import pop_tracked, render, safe_delete_message, safe_edit_text, track_callback
 
 router = Router(name="groups")
 
@@ -84,13 +83,16 @@ async def lggdel_menu(callback: CallbackQuery) -> None:
 async def lggdel_with_confirm_ask(callback: CallbackQuery) -> None:
     gid = callback.data.split(":", 1)[1]
     await callback.answer()
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Да, удалить всё", callback_data=f"lggdelwithc:{gid}", style="danger")
-    builder.button(text="⬅️ Назад", callback_data=f"lggdel:{gid}", style="primary")
-    builder.adjust(1)
+    kb = confirm_delete_keyboard(
+        f"lggdelwithc:{gid}",
+        f"lggdel:{gid}",
+        confirm_label="🗑 Да, удалить всё",
+        cancel_label="⬅️ Назад",
+        cancel_style="primary",
+    )
     await callback.message.edit_text(
         "⚠️ Группа и все растения внутри неё будут удалены безвозвратно. Точно?",
-        reply_markup=builder.as_markup(),
+        reply_markup=kb,
     )
 
 
@@ -107,10 +109,7 @@ async def lggdel_with_apply(callback: CallbackQuery, user_id: int) -> None:
 
     await callback.answer("Удалено")
     text, kb = await group_menu_text_and_kb(user_id)
-    try:
-        await callback.message.edit_text(f"✅ Группа «{name}» удалена вместе с растениями.\n\n{text}", reply_markup=kb)
-    except TelegramBadRequest:
-        pass
+    await safe_edit_text(callback.message, f"✅ Группа «{name}» удалена вместе с растениями.\n\n{text}", reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("lggdelmove:"))
@@ -170,10 +169,7 @@ async def lggdel_move_new_group(message: Message, state: FSMContext, user_id: in
     tracked_id = await pop_tracked(state)
     await state.clear()
     if tracked_id:
-        try:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=tracked_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(message.bot, message.chat.id, tracked_id)
     await _finalize_delete_move(message, user_id, gid, target_id, edit=False)
 
 
@@ -185,10 +181,7 @@ async def _finalize_delete_move(
         if group is None:
             text = "⚠️ Группа не найдена, возможно уже удалена."
             if edit:
-                try:
-                    await message.edit_text(text)
-                except TelegramBadRequest:
-                    pass
+                await safe_edit_text(message, text)
             else:
                 await message.answer(text)
             return
@@ -202,9 +195,6 @@ async def _finalize_delete_move(
     text, kb = await group_menu_text_and_kb(user_id)
     notice = f"✅ Группа «{name}» удалена, растения перенесены.\n\n{text}"
     if edit:
-        try:
-            await message.edit_text(notice, reply_markup=kb)
-        except TelegramBadRequest:
-            pass
+        await safe_edit_text(message, notice, reply_markup=kb)
     else:
         await message.answer(notice, reply_markup=kb)

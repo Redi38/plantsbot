@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from bot.db.models import AiLog, Group, Plant, User
+from bot.utils.fuzzy import fuzzy_find
 
 
 async def get_or_create_user(
@@ -79,6 +80,18 @@ async def get_group_by_name(session: AsyncSession, user_id: int, name: str) -> G
         if group.name.strip().lower() == normalized:
             return group
     return None
+
+
+async def find_groups_fuzzy(session: AsyncSession, user_id: int, name: str) -> list[Group]:
+    """Нечёткий поиск групп (обёртка над bot.utils.fuzzy.fuzzy_find) — на
+    случай, если пользователь написал имя группы не точь-в-точь (например
+    «testik» вместо «testik1», либо наоборот с лишним словом/цифрой).
+    Используется как fallback после того, как get_group_by_name не нашёл
+    точного совпадения. Возвращает всех подходящих кандидатов — вызывающий
+    код сам решает, что делать с несколькими совпадениями (обычно: \
+    действовать только если ровно один кандидат, иначе просить уточнить)."""
+    result = await session.execute(select(Group).where(Group.user_id == user_id))
+    return fuzzy_find(list(result.scalars()), name)
 
 
 async def create_group(session: AsyncSession, user_id: int, name: str) -> Group:

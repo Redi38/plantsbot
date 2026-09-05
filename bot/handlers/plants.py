@@ -1,5 +1,4 @@
 from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,10 +8,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db import crud
 from bot.db.database import get_session
 from bot.handlers.list_view import send_group_page, show_group_page
-from bot.keyboards.inline import groups_keyboard
+from bot.keyboards.inline import add_pagination_buttons, confirm_delete_keyboard, groups_keyboard
 from bot.keyboards.reply import BTN_ADD, MENU_BUTTONS
 from bot.services import plant_service
-from bot.utils.chat import begin_dialog, pop_tracked, render, track_callback
+from bot.utils.chat import begin_dialog, pop_tracked, render, safe_delete_message, safe_edit_text, track_callback
 
 router = Router(name="plants")
 
@@ -78,13 +77,9 @@ def _plant_pick_keyboard(
         builder.button(text=plant.name, callback_data=f"{item_prefix}:{token}:{plant.id}", style="danger")
     row_sizes = [1] * len(items_page)
 
-    if total_pages > 1:
-        prev_page = page - 1 if page > 1 else total_pages
-        next_page = page + 1 if page < total_pages else 1
-        builder.button(text="◀️", callback_data=f"{page_prefix}:{token}:{prev_page}", style="primary")
-        builder.button(text=f"{page}/{total_pages}", callback_data="list_noop", style="primary")
-        builder.button(text="▶️", callback_data=f"{page_prefix}:{token}:{next_page}", style="primary")
-        row_sizes.append(3)
+    pagination_count = add_pagination_buttons(builder, page, total_pages, lambda p: f"{page_prefix}:{token}:{p}")
+    if pagination_count:
+        row_sizes.append(pagination_count)
 
     builder.button(text="⬅️ Назад", callback_data=back_data, style="primary")
     row_sizes.append(2)
@@ -175,10 +170,7 @@ async def _proceed_after_group(
 async def cmd_add(message: Message, state: FSMContext) -> None:
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
-        try:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(message.bot, message.chat.id, old_msg_id)
     await state.set_state(AddPlant.name)
     await render(message, state, "🌱 Как называется растение?", reply_markup=_cancel_keyboard().as_markup())
 
@@ -192,16 +184,14 @@ async def lgadd_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     old_msg_id = await begin_dialog(state)
     if old_msg_id and old_msg_id != callback.message.message_id:
-        try:
-            await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=old_msg_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(callback.bot, callback.message.chat.id, old_msg_id)
     await state.update_data(return_token=token)
     if token != "all":
         await state.update_data(preset_group_id=None if token == "none" else int(token))
     await state.set_state(AddPlant.name)
     await callback.message.edit_text("🌱 Как называется растение?", reply_markup=_cancel_keyboard().as_markup())
     await track_callback(callback, state)
+
 
 
 @router.callback_query(F.data == "addcancel")
@@ -309,10 +299,7 @@ async def _finalize_add(message: Message, state: FSMContext, user_id: int, comme
         builder = InlineKeyboardBuilder()
         builder.button(text="📋 Список", callback_data=f"lg:{group_token}", style="primary")
         if tracked_id:
-            try:
-                await message.bot.delete_message(chat_id=message.chat.id, message_id=tracked_id)
-            except TelegramBadRequest:
-                pass
+            await safe_delete_message(message.bot, message.chat.id, tracked_id)
         await message.answer(text, reply_markup=builder.as_markup())
 
 
@@ -344,10 +331,7 @@ async def _show_plant_pick(
 
     items_page, page, total_pages = _paginate(plants, page, PLANT_PICK_PAGE_SIZE)
     kb = _plant_pick_keyboard(item_prefix, page_prefix, token, items_page, page, total_pages, back_data=f"lg:{token}")
-    try:
-        await callback.message.edit_text(prompt, reply_markup=kb)
-    except TelegramBadRequest:
-        pass
+    await safe_edit_text(callback.message, prompt, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("lgdel:"))
@@ -368,11 +352,10 @@ async def lgdel_page(callback: CallbackQuery, user_id: int) -> None:
 async def lgpdel_confirm_ask(callback: CallbackQuery) -> None:
     _, token, plant_id = callback.data.split(":", 2)
     await callback.answer()
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Удалить", callback_data=f"lgpdelc:{token}:{plant_id}", style="danger")
-    builder.button(text="⬅️ Назад", callback_data=f"lg:{token}", style="primary")
-    builder.adjust(1)
-    await callback.message.edit_text("🗑 Точно удалить это растение?", reply_markup=builder.as_markup())
+    kb = confirm_delete_keyboard(
+        f"lgpdelc:{token}:{plant_id}", f"lg:{token}", cancel_label="⬅️ Назад", cancel_style="primary"
+    )
+    await callback.message.edit_text("🗑 Точно удалить это растение?", reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("lgpdelc:"))
@@ -406,15 +389,24 @@ async def lgedit_page(callback: CallbackQuery, user_id: int) -> None:
 
 
 @router.callback_query(F.data.startswith("lgpedit:"))
-async def lgpedit_field(callback: CallbackQuery) -> None:
+async def lgpedit_field(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
     _, token, plant_id = callback.data.split(":", 2)
     await callback.answer()
+    await state.clear()
+
+    async with get_session() as session:
+        plant = await crud.get_plant(session, int(plant_id), user_id)
+    if plant is None:
+        await callback.message.edit_text("⚠️ Растение уже удалено, возможно, кем-то другим.")
+        return
+    plant_label = f"{plant.name} ({plant.comment})" if plant.comment else plant.name
+
     builder = InlineKeyboardBuilder()
     builder.button(text="Название", callback_data=f"lgpeditf:{token}:{plant_id}:name", style="success")
     builder.button(text="Комментарий", callback_data=f"lgpeditf:{token}:{plant_id}:comment", style="primary")
     builder.button(text="⬅️ Назад", callback_data=f"lg:{token}", style="primary")
     builder.adjust(2, 1)
-    await callback.message.edit_text("✏️ Что изменить?", reply_markup=builder.as_markup())
+    await callback.message.edit_text(f"✏️ «{plant_label}» — что изменить?", reply_markup=builder.as_markup())
 
 
 @router.callback_query(F.data.startswith("lgpeditf:"))
@@ -425,7 +417,9 @@ async def lgpeditf_ask_value(callback: CallbackQuery, state: FSMContext) -> None
     await state.update_data(token=token, plant_id=int(plant_id), field=field)
     await state.set_state(EditPlant.value)
     prompt = "✏️ Новое название:" if field == "name" else "💬 Новый комментарий (или /skip, чтобы убрать):"
-    await callback.message.edit_text(prompt)
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data=f"lgpedit:{token}:{plant_id}", style="primary")
+    await callback.message.edit_text(prompt, reply_markup=builder.as_markup())
     await track_callback(callback, state)
 
 

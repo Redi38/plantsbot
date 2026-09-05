@@ -46,10 +46,19 @@ async def handle_delete_group_intent(message: Message, user_id: int, intent: dic
 
     async with get_session() as session:
         group = await crud.get_group_by_name(session, user_id, group_name)
+        if group is None:
+            candidates = await crud.find_groups_fuzzy(session, user_id, group_name)
 
     if group is None:
-        await message.answer(f"Не нашла группу «{group_name}». Проверь 📋 Список")
-        return
+        if len(candidates) == 1:
+            group = candidates[0]
+        elif len(candidates) > 1:
+            names = ", ".join(f"«{g.name}»" for g in candidates)
+            await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
+            return
+        else:
+            await message.answer(f"Не нашла группу «{group_name}». Проверь 📋 Список")
+            return
 
     builder = InlineKeyboardBuilder()
     builder.button(text="📦 Удалить, растения переместить", callback_data=f"lggdelmove:{group.id}", style="primary")

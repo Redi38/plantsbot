@@ -13,6 +13,28 @@ from aiogram.types import CallbackQuery, Message
 _KEY = "_bot_msg_id"
 
 
+async def safe_delete_message(bot, chat_id: int, message_id: int) -> None:
+    """Удаляет сообщение бота, молча игнорируя ошибку, если оно уже не
+    существует (удалено раньше, слишком старое для Telegram API и т.п.) —
+    этот try/except повторялся почти дословно во всех хендлерах, где нужно
+    подчистить предыдущий шаг диалога."""
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except TelegramBadRequest:
+        pass
+
+
+async def safe_edit_text(message: Message, text: str, reply_markup=None) -> None:
+    """edit_text с тем же молчаливым проглатыванием TelegramBadRequest —
+    типично когда пользователь успел нажать другую кнопку/сообщение уже
+    неактуально. Тот же паттерн, что и safe_delete_message, но для правки
+    текста вместо удаления."""
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+    except TelegramBadRequest:
+        pass
+
+
 async def begin_dialog(state: FSMContext) -> int | None:
     """Начинает новый диалог с нуля: возвращает id ранее отслеживаемого
     рабочего сообщения бота (если сценарий уже был начат — из другой
@@ -34,10 +56,7 @@ async def render(message: Message, state: FSMContext, text: str, reply_markup=No
     msg_id = data.get(_KEY)
 
     if msg_id:
-        try:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=msg_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(message.bot, message.chat.id, msg_id)
 
     sent = await message.answer(text, reply_markup=reply_markup)
     await state.update_data(**{_KEY: sent.message_id})

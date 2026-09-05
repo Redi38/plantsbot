@@ -1,5 +1,4 @@
 from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -8,9 +7,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db import crud
 from bot.db.database import get_session
 from bot.db.models import Group
+from bot.keyboards.inline import add_pagination_buttons
 from bot.keyboards.reply import BTN_LIST, main_menu_keyboard
 from bot.services import plant_service
-from bot.utils.chat import begin_dialog
+from bot.utils.chat import begin_dialog, safe_delete_message, safe_edit_text
 
 router = Router(name="list_view")
 
@@ -64,10 +64,7 @@ async def group_menu_text_and_kb(user_id: int):
 async def cmd_list(message: Message, state: FSMContext, user_id: int) -> None:
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
-        try:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(message.bot, message.chat.id, old_msg_id)
     text, kb = await group_menu_text_and_kb(user_id)
     await message.answer(text, reply_markup=kb)
 
@@ -76,10 +73,7 @@ async def cmd_list(message: Message, state: FSMContext, user_id: int) -> None:
 async def list_menu_back(callback: CallbackQuery, user_id: int) -> None:
     text, kb = await group_menu_text_and_kb(user_id)
     await callback.answer()
-    try:
-        await callback.message.edit_text(text, reply_markup=kb)
-    except TelegramBadRequest:
-        pass
+    await safe_edit_text(callback.message, text, reply_markup=kb)
 
 
 # ---------- Просмотр конкретной группы (или "всё") с пагинацией ----------
@@ -100,15 +94,7 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
 
     def add_pagination():
         nonlocal pagination_row_size
-        if total_pages > 1:
-            prev_page = page - 1 if page > 1 else total_pages
-            builder.button(text="◀️", callback_data=f"lgpage:{token}:{prev_page}", style="primary")
-            pagination_row_size += 1
-            builder.button(text=f"{page}/{total_pages}", callback_data="list_noop", style="primary")
-            pagination_row_size += 1
-            next_page = page + 1 if page < total_pages else 1
-            builder.button(text="▶️", callback_data=f"lgpage:{token}:{next_page}", style="primary")
-            pagination_row_size += 1
+        pagination_row_size = add_pagination_buttons(builder, page, total_pages, lambda p: f"lgpage:{token}:{p}")
 
     def add_crud():
         builder.button(text="➕ Добавить", callback_data=f"lgadd:{token}", style="success")
@@ -157,10 +143,7 @@ async def show_group_page(callback: CallbackQuery, user_id: int, token: str, pag
         return
     _, pages = result
     page = max(1, min(page, len(pages)))
-    try:
-        await callback.message.edit_text(pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages)))
-    except TelegramBadRequest:
-        pass
+    await safe_edit_text(callback.message, pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages)))
 
 
 async def send_group_page(
@@ -182,10 +165,7 @@ async def send_group_page(
     markup = group_pages_keyboard(token, page, len(pages))
 
     if edit_message_id:
-        try:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=edit_message_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(message.bot, message.chat.id, edit_message_id)
 
     await message.answer(text, reply_markup=markup)
 

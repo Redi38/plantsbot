@@ -1,5 +1,4 @@
 from aiogram import F, Router
-from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -9,7 +8,7 @@ from bot.db.database import get_session
 from bot.keyboards.inline import confirm_keyboard
 from bot.keyboards.reply import BTN_IMPORT, MENU_BUTTONS
 from bot.services import import_service
-from bot.utils.chat import begin_dialog
+from bot.utils.chat import begin_dialog, safe_delete_message
 from bot.utils.text import split_long_text
 
 router = Router(name="import_")
@@ -25,10 +24,7 @@ class ImportFlow(StatesGroup):
 async def cmd_import(message: Message, state: FSMContext) -> None:
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
-        try:
-            await message.bot.delete_message(chat_id=message.chat.id, message_id=old_msg_id)
-        except TelegramBadRequest:
-            pass
+        await safe_delete_message(message.bot, message.chat.id, old_msg_id)
     await state.set_state(ImportFlow.waiting_input)
     await message.answer(
         "📥 Пришли список растений одним из способов:\n\n"
