@@ -50,6 +50,20 @@ async def _with_plant(user_id: int, plant_id: int, mutate) -> Plant | None:
         return plant
 
 
+async def _get_user_or_404(session, user_id: int):
+    """Общая проверка "пользователь существует" перед операциями в
+    админке — раньше одна и та же пара строк повторялась в user_detail,
+    delete_user, export_csv и import_plants."""
+    user = await crud.get_user(session, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    return user
+
+
+def _plant_count(groups: list[Group], ungrouped: list[Plant]) -> int:
+    return sum(len(g.plants) for g in groups) + len(ungrouped)
+
+
 @app.on_event("startup")
 async def on_startup() -> None:
     await init_db()
@@ -105,8 +119,9 @@ async def users_list(request: Request, _: str = Depends(require_auth)):
         cards = []
         for user in users:
             groups, ungrouped = await crud.get_full_tree(session, user.id)
-            plant_count = sum(len(g.plants) for g in groups) + len(ungrouped)
-            cards.append({"user": user, "group_count": len(groups), "plant_count": plant_count})
+            cards.append(
+                {"user": user, "group_count": len(groups), "plant_count": _plant_count(groups, ungrouped)}
+            )
     return templates.TemplateResponse(
         "users.html", {"request": request, "cards": cards}
     )
@@ -131,15 +146,13 @@ async def ai_logs_list(request: Request, _: str = Depends(require_auth)):
 @app.get("/users/{user_id}")
 async def user_detail(request: Request, user_id: int, _: str = Depends(require_auth)):
     async with get_session() as session:
-        user = await crud.get_user(session, user_id)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user = await _get_user_or_404(session, user_id)
         groups, ungrouped = await crud.get_full_tree(session, user.id)
         ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
         ai_logs = await crud.list_ai_logs_for_user(session, user.id, limit=30)
     msg = request.query_params.get("msg")
     err = request.query_params.get("err")
-    plant_count = sum(len(g.plants) for g in groups) + len(ungrouped)
+    plant_count = _plant_count(groups, ungrouped)
     return templates.TemplateResponse(
         "user_detail.html",
         {
@@ -162,9 +175,7 @@ async def delete_user(user_id: int, _: str = Depends(require_auth)):
     саму запись пользователя не трогает — бот должен продолжать узнавать
     его при следующем обращении, просто с пустым списком."""
     async with get_session() as session:
-        user = await crud.get_user(session, user_id)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        await _get_user_or_404(session, user_id)
         await crud.clear_user_plants(session, user_id)
         await session.commit()
     return RedirectResponse(f"/users/{user_id}?msg=База очищена", status_code=303)
@@ -175,9 +186,7 @@ async def export_csv(user_id: int, _: str = Depends(require_auth)):
     """Скачать список растений пользователя в CSV (group,name,comment)."""
     import io, csv as csv_mod
     async with get_session() as session:
-        user = await crud.get_user(session, user_id)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user = await _get_user_or_404(session, user_id)
         groups, ungrouped = await crud.get_full_tree(session, user.id)
 
     buf = io.StringIO()
@@ -239,9 +248,7 @@ async def import_plants(
             return RedirectResponse(f"/users/{user_id}?err={exc2}", status_code=303)
 
     async with get_session() as session:
-        user = await crud.get_user(session, user_id)
-        if user is None:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user = await _get_user_or_404(session, user_id)
         preview = await import_service.build_preview(session, user.id, rows)
         count, skipped = await import_service.commit_import(session, user.id, preview)
 

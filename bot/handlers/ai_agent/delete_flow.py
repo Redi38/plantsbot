@@ -29,16 +29,15 @@ from bot.db.database import get_session
 from bot.db.models import Group, Plant
 from bot.keyboards.inline import confirm_delete_keyboard
 from bot.services import plant_service
-from bot.utils.fuzzy import fuzzy_find
 
 from . import router
-from .common import reply
-from .keyboards import delete_pick_keyboard
+from .common import find_plant_matches, pick_context, reply
+from .keyboards import plant_pick_keyboard
 from .states import AIDelete
 
 
 def _find_matches(all_plants: list[Plant], query: str) -> list[Plant]:
-    return fuzzy_find(all_plants, query)
+    return find_plant_matches(all_plants, query)
 
 
 def _find_matches_by_group(groups: list[Group], all_plants: list[Plant], query: str) -> list[Plant]:
@@ -124,12 +123,13 @@ async def handle_delete_intent(
         await show_confirm_delete(message, state, matches[0].id, matches[0].name)
         return
 
-    group_name_by_id = {g.id: g.name for g in groups}
-    multi_group = len({p.group_id for p in matches}) > 1
+    group_name_by_id, multi_group = pick_context(groups, matches)
     await state.set_state(AIDelete.pick_plant)
     await message.answer(
         f"Нашла несколько растений «{query_label}» — какое удалить?",
-        reply_markup=delete_pick_keyboard(matches, group_name_by_id, multi_group).as_markup(),
+        reply_markup=plant_pick_keyboard(
+            matches, group_name_by_id, multi_group, item_prefix="aidelpick", cancel_data="aidelcancel"
+        ).as_markup(),
     )
 
 

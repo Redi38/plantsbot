@@ -19,6 +19,8 @@ from bot.db import crud
 from bot.db.database import get_session
 from bot.services import group_service
 
+from .common import resolve_group
+
 
 async def handle_create_group_intent(message: Message, user_id: int, intent: dict) -> None:
     group_name = intent["group_name"].strip()
@@ -48,20 +50,15 @@ async def handle_delete_group_intent(message: Message, user_id: int, intent: dic
         return
 
     async with get_session() as session:
-        group = await crud.get_group_by_name(session, user_id, group_name)
-        if group is None:
-            candidates = await crud.find_groups_fuzzy(session, user_id, group_name)
+        group, candidates = await resolve_group(session, user_id, group_name)
 
     if group is None:
-        if len(candidates) == 1:
-            group = candidates[0]
-        elif len(candidates) > 1:
+        if candidates:
             names = ", ".join(f"«{g.name}»" for g in candidates)
             await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
-            return
         else:
             await message.answer(f"Не нашла группу «{group_name}». Проверь 📋 Список")
-            return
+        return
 
     builder = InlineKeyboardBuilder()
     builder.button(text="📦 Удалить, растения переместить", callback_data=f"lggdelmove:{group.id}", style="primary")
@@ -87,18 +84,14 @@ async def handle_rename_group_intent(message: Message, user_id: int, intent: dic
         return
 
     async with get_session() as session:
-        group = await crud.get_group_by_name(session, user_id, old_name)
+        group, candidates = await resolve_group(session, user_id, old_name)
         if group is None:
-            candidates = await crud.find_groups_fuzzy(session, user_id, old_name)
-            if len(candidates) == 1:
-                group = candidates[0]
-            elif len(candidates) > 1:
+            if candidates:
                 names = ", ".join(f"«{g.name}»" for g in candidates)
                 await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
-                return
             else:
                 await message.answer(f"Не нашла группу «{old_name}». Проверь 📋 Список")
-                return
+            return
 
         existing_with_new_name = await crud.get_group_by_name(session, user_id, new_name)
         if existing_with_new_name and existing_with_new_name.id != group.id:

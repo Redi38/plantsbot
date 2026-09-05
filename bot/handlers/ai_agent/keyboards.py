@@ -34,21 +34,24 @@ def delete_pick_label(plant, group_name_by_id: dict[int, str], multi_group: bool
     return f"{plant.name} #{index}"
 
 
-def delete_pick_keyboard(matches: list, group_name_by_id: dict[int, str], multi_group: bool) -> InlineKeyboardBuilder:
+def plant_pick_keyboard(
+    matches: list,
+    group_name_by_id: dict[int, str],
+    multi_group: bool,
+    *,
+    item_prefix: str,
+    cancel_data: str,
+    item_style: str = "danger",
+) -> InlineKeyboardBuilder:
+    """Общая клавиатура выбора растения из нескольких совпадений — для
+    удаления (item_prefix="aidelpick", style="danger") и для изменения
+    (item_prefix="aieditpick", style="primary"). Раньше это были два
+    отдельных, но идентичных по структуре builder'а, различавшихся только
+    префиксом и цветом."""
     builder = InlineKeyboardBuilder()
     for i, plant in enumerate(matches, start=1):
         label = delete_pick_label(plant, group_name_by_id, multi_group, i)
-        builder.button(text=label, callback_data=f"aidelpick:{plant.id}", style="danger")
-    builder.button(text="❌ Отмена", callback_data="aidelcancel", style="danger")
-    builder.adjust(1)
-    return builder
-
-
-def edit_pick_keyboard(matches: list, group_name_by_id: dict[int, str], multi_group: bool) -> InlineKeyboardBuilder:
-    builder = InlineKeyboardBuilder()
-    for i, plant in enumerate(matches, start=1):
-        label = delete_pick_label(plant, group_name_by_id, multi_group, i)
-        builder.button(text=label, callback_data=f"aieditpick:{plant.id}", style="primary")
-    builder.button(text="❌ Отмена", callback_data="aieditcancel", style="danger")
+        builder.button(text=label, callback_data=f"{item_prefix}:{plant.id}", style=item_style)
+    builder.button(text="❌ Отмена", callback_data=cancel_data, style="danger")
     builder.adjust(1)
     return builder

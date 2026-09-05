@@ -27,6 +27,7 @@ from bot.utils.chat import begin_dialog, safe_delete_message
 
 from . import router
 from .add_flow import handle_add_intent, match_group
+from .common import resolve_group
 from .delete_flow import handle_delete_intent
 from .edit_flow import handle_edit_plant_intent
 from .group_actions import handle_create_group_intent, handle_delete_group_intent, handle_rename_group_intent
@@ -124,10 +125,8 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
         matched_group = match_group(groups, filter_term)
         if not matched_group:
             async with get_session() as session:
-                candidates = await crud.find_groups_fuzzy(session, user_id, filter_term)
-            if len(candidates) == 1:
-                matched_group = candidates[0]
-            elif len(candidates) > 1:
+                matched_group, candidates = await resolve_group(session, user_id, filter_term)
+            if not matched_group and candidates:
                 names = ", ".join(f"«{g.name}»" for g in candidates)
                 await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
                 return

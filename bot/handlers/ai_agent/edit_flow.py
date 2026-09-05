@@ -17,15 +17,15 @@ from aiogram.types import CallbackQuery, Message
 from bot.db import crud
 from bot.db.database import get_session
 from bot.db.models import Group, Plant
-from bot.utils.fuzzy import fuzzy_find
 
 from . import router
-from .keyboards import edit_pick_keyboard
+from .common import find_plant_matches, pick_context
+from .keyboards import plant_pick_keyboard
 from .states import AIEdit
 
 
 def _find_matches(all_plants: list[Plant], query: str) -> list[Plant]:
-    return fuzzy_find(all_plants, query)
+    return find_plant_matches(all_plants, query)
 
 
 async def _apply_edit(message_or_callback, plant_id: int, user_id: int, new_name: str | None, comment: str | None) -> None:
@@ -101,13 +101,14 @@ async def handle_edit_plant_intent(
         await _apply_edit(message, matches[0].id, user_id, new_name, comment)
         return
 
-    group_name_by_id = {g.id: g.name for g in groups}
-    multi_group = len({p.group_id for p in matches}) > 1
+    group_name_by_id, multi_group = pick_context(groups, matches)
     await state.set_state(AIEdit.pick_plant)
     await state.update_data(new_name=new_name, comment=comment)
     await message.answer(
         f"Нашла несколько растений «{plant_name}» — какое изменить?",
-        reply_markup=edit_pick_keyboard(matches, group_name_by_id, multi_group).as_markup(),
+        reply_markup=plant_pick_keyboard(
+            matches, group_name_by_id, multi_group, item_prefix="aieditpick", cancel_data="aieditcancel", item_style="primary"
+        ).as_markup(),
     )
 
 
