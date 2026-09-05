@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from admin.auth import AuthRequired, create_session_token, require_auth, verify_credentials, SESSION_COOKIE
 from admin.database import get_session, init_db
 from bot.db import crud
+from bot.db.models import Group, Plant
 from bot.services import import_service, plant_service
 
 app = FastAPI(title="PlantsBot Dashboard")
@@ -24,6 +25,29 @@ def _group_anchor(group_id: int | None) -> str:
 def _user_redirect(user_id: int, anchor: str | None = None) -> RedirectResponse:
     url = f"/users/{user_id}#{anchor}" if anchor else f"/users/{user_id}"
     return RedirectResponse(url, status_code=303)
+
+
+async def _with_group(user_id: int, group_id: int, mutate) -> Group | None:
+    """Общий паттерн для мутаций группы из форм админки: открыть сессию,
+    найти группу пользователя, если нашлась — вызвать mutate(session, group)
+    и закоммитить. Возвращает саму группу (или None, если не найдена/чужая),
+    чтобы вызывающий код мог решить, куда редиректить."""
+    async with get_session() as session:
+        group = await crud.get_group(session, group_id, user_id)
+        if group:
+            await mutate(session, group)
+            await session.commit()
+        return group
+
+
+async def _with_plant(user_id: int, plant_id: int, mutate) -> Plant | None:
+    """Аналог _with_group для растения."""
+    async with get_session() as session:
+        plant = await crud.get_plant(session, plant_id, user_id)
+        if plant:
+            await mutate(session, plant)
+            await session.commit()
+        return plant
 
 
 @app.on_event("startup")
@@ -199,27 +223,32 @@ async def import_plants(
         return RedirectResponse(f"/users/{user_id}?err=Нет данных для импорта", status_code=303)
 
     first_line = raw.splitlines()[0].lower().strip()
-    is_csv = "name" in first_line and ("," in first_line or ";" in first_line)
+    looks_like_csv = "name" in first_line and ("," in first_line or ";" in first_line)
 
     try:
-        if is_csv:
-            rows = import_service.parse_csv(raw)
-        else:
-            try:
-                rows = import_service.parse_csv(raw)
-            except import_service.ImportParseError:
-                rows = import_service.parse_markdown(raw)
+        rows = import_service.parse_csv(raw)
     except import_service.ImportParseError as exc:
-        return RedirectResponse(f"/users/{user_id}?err={exc}", status_code=303)
+        # Если заголовок явно похож на CSV, ошибку парсинга показываем как
+        # есть — так понятнее, что не так с самим CSV, вместо попытки
+        # угадать markdown-формат там, где его точно нет.
+        if looks_like_csv:
+            return RedirectResponse(f"/users/{user_id}?err={exc}", status_code=303)
+        try:
+            rows = import_service.parse_markdown(raw)
+        except import_service.ImportParseError as exc2:
+            return RedirectResponse(f"/users/{user_id}?err={exc2}", status_code=303)
 
     async with get_session() as session:
         user = await crud.get_user(session, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="Пользователь не найден")
         preview = await import_service.build_preview(session, user.id, rows)
-        count = await import_service.commit_import(session, user.id, preview)
+        count, skipped = await import_service.commit_import(session, user.id, preview)
 
-    return RedirectResponse(f"/users/{user_id}?msg=Импортировано {count} растений", status_code=303)
+    msg = f"Импортировано {count} растений"
+    if skipped:
+        msg += f", пропущено {skipped} дублей"
+    return RedirectResponse(f"/users/{user_id}?msg={msg}", status_code=303)
 
 
 @app.post("/users/{user_id}/groups")
@@ -272,21 +301,14 @@ async def set_ungrouped_label(user_id: int, label: str = Form(""), _: str = Depe
 async def rename_group(
     group_id: int, user_id: int = Form(...), name: str = Form(...), _: str = Depends(require_auth)
 ):
-    async with get_session() as session:
-        group = await crud.get_group(session, group_id, user_id)
-        if group and name.strip():
-            await crud.rename_group(session, group, name)
-            await session.commit()
+    if name.strip():
+        await _with_group(user_id, group_id, lambda session, group: crud.rename_group(session, group, name))
     return _user_redirect(user_id, _group_anchor(group_id))
 
 
 @app.post("/groups/{group_id}/delete")
 async def delete_group(group_id: int, user_id: int = Form(...), _: str = Depends(require_auth)):
-    async with get_session() as session:
-        group = await crud.get_group(session, group_id, user_id)
-        if group:
-            await crud.delete_group(session, group)
-            await session.commit()
+    await _with_group(user_id, group_id, crud.delete_group)
     return _user_redirect(user_id, "ungrouped")
 
 
@@ -294,11 +316,7 @@ async def delete_group(group_id: int, user_id: int = Form(...), _: str = Depends
 async def delete_group_with_plants(group_id: int, user_id: int = Form(...), _: str = Depends(require_auth)):
     """Удаляет группу вместе со всеми растениями внутри неё (в отличие от
     /groups/{group_id}/delete, где растения остаются, просто без группы)."""
-    async with get_session() as session:
-        group = await crud.get_group(session, group_id, user_id)
-        if group:
-            await crud.delete_group_with_plants(session, group)
-            await session.commit()
+    await _with_group(user_id, group_id, crud.delete_group_with_plants)
     return _user_redirect(user_id, "groups")
 
 
@@ -314,22 +332,18 @@ async def rename_plant(
     _: str = Depends(require_auth),
 ):
     gid = int(group_id) if group_id else None
-    async with get_session() as session:
-        plant = await crud.get_plant(session, plant_id, user_id)
-        if plant and name.strip():
-            await crud.update_plant(
+    if name.strip():
+        await _with_plant(
+            user_id,
+            plant_id,
+            lambda session, plant: crud.update_plant(
                 session, plant, name=name, comment=comment.strip() or None, group_id=gid
-            )
-            await session.commit()
+            ),
+        )
     return _user_redirect(user_id, _group_anchor(gid))
 
 
 @app.post("/plants/{plant_id}/delete")
 async def delete_plant(plant_id: int, user_id: int = Form(...), _: str = Depends(require_auth)):
-    async with get_session() as session:
-        plant = await crud.get_plant(session, plant_id, user_id)
-        anchor = _group_anchor(plant.group_id) if plant else None
-        if plant:
-            await crud.delete_plant(session, plant)
-            await session.commit()
-    return _user_redirect(user_id, anchor)
+    plant = await _with_plant(user_id, plant_id, crud.delete_plant)
+    return _user_redirect(user_id, _group_anchor(plant.group_id) if plant else None)
