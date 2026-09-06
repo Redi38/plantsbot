@@ -19,7 +19,7 @@ from bot.db import crud
 from bot.db.database import get_session
 from bot.services import group_service
 
-from .common import resolve_group
+from .common import reply_group_not_found, resolve_group
 
 
 async def handle_create_group_intent(message: Message, user_id: int, intent: dict) -> None:
@@ -53,11 +53,7 @@ async def handle_delete_group_intent(message: Message, user_id: int, intent: dic
         group, candidates = await resolve_group(session, user_id, group_name)
 
     if group is None:
-        if candidates:
-            names = ", ".join(f"«{g.name}»" for g in candidates)
-            await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
-        else:
-            await message.answer(f"Не нашла группу «{group_name}». Проверь 📋 Список")
+        await reply_group_not_found(message, group_name, candidates)
         return
 
     builder = InlineKeyboardBuilder()
@@ -86,11 +82,7 @@ async def handle_rename_group_intent(message: Message, user_id: int, intent: dic
     async with get_session() as session:
         group, candidates = await resolve_group(session, user_id, old_name)
         if group is None:
-            if candidates:
-                names = ", ".join(f"«{g.name}»" for g in candidates)
-                await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
-            else:
-                await message.answer(f"Не нашла группу «{old_name}». Проверь 📋 Список")
+            await reply_group_not_found(message, old_name, candidates)
             return
 
         existing_with_new_name = await crud.get_group_by_name(session, user_id, new_name)

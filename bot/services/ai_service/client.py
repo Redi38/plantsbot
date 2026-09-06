@@ -13,6 +13,28 @@ from .exceptions import AIServiceRateLimited, AIServiceTimeout, AIServiceUnavail
 _RETRY_AFTER_RE = re.compile(r"try again in ([\d.]+)\s*s", re.IGNORECASE)
 _JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
+_session: aiohttp.ClientSession | None = None
+
+
+def get_session() -> aiohttp.ClientSession:
+    """Один долгоживущий ClientSession на процесс вместо создания нового
+    на каждый вызов call_api — экономит TCP/TLS-хендшейк при частых
+    запросах к AI API. Ленивая инициализация: aiohttp требует создавать
+    сессию внутри running event loop, а не на этапе импорта модуля."""
+    global _session
+    if _session is None or _session.closed:
+        _session = aiohttp.ClientSession()
+    return _session
+
+
+async def close_session() -> None:
+    """Вызывается при остановке бота (см. bot/main.py) — иначе aiohttp
+    ругается в логах на незакрытую сессию/коннектор."""
+    global _session
+    if _session is not None and not _session.closed:
+        await _session.close()
+    _session = None
+
 
 def _parse_retry_after(error_text: str) -> float:
     """Провайдер (например, Groq) сам подсказывает точное время ожидания в
@@ -78,7 +100,8 @@ async def call_api(
         payload["response_format"] = {"type": "json_object"}
 
     try:
-        async with aiohttp.ClientSession() as session, session.post(
+        session = get_session()
+        async with session.post(
             f"{config.ai_api_base_url}/chat/completions",
             headers=headers,
             json=payload,

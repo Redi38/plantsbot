@@ -8,7 +8,7 @@ from bot.db.models import Group, Plant
 from bot.utils.fuzzy import fuzzy_find
 
 
-async def reply(reply_target: Message | CallbackQuery, text: str, markup) -> None:
+async def reply(reply_target: Message | CallbackQuery, text: str, markup=None) -> None:
     """И обычное сообщение, и нажатие кнопки обрабатываются одинаково во
     всех сценариях ИИ-агента: если пришли из callback — редактируем
     существующее сообщение, если из свободного текста — отвечаем новым."""
@@ -55,3 +55,14 @@ async def resolve_group(session: AsyncSession, user_id: int, name: str) -> tuple
     if len(candidates) == 1:
         return candidates[0], []
     return None, candidates
+
+
+async def reply_group_not_found(message: Message, group_name: str, candidates: list[Group]) -> None:
+    """Единое сообщение для случая, когда resolve_group не нашёл группу
+    однозначно — раньше было продублировано в group_actions
+    (delete_group/rename_group)."""
+    if candidates:
+        names = ", ".join(f"«{g.name}»" for g in candidates)
+        await message.answer(f"Нашла несколько похожих групп: {names}. Уточни название точнее.")
+    else:
+        await message.answer(f"Не нашла группу «{group_name}». Проверь 📋 Список")

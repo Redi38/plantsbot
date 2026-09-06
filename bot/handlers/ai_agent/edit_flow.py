@@ -19,7 +19,7 @@ from bot.db.database import get_session
 from bot.db.models import Group, Plant
 
 from . import router
-from .common import find_plant_matches, pick_context
+from .common import find_plant_matches, pick_context, reply
 from .keyboards import plant_pick_keyboard
 from .states import AIEdit
 
@@ -28,15 +28,13 @@ def _find_matches(all_plants: list[Plant], query: str) -> list[Plant]:
     return find_plant_matches(all_plants, query)
 
 
-async def _apply_edit(message_or_callback, plant_id: int, user_id: int, new_name: str | None, comment: str | None) -> None:
+async def _apply_edit(
+    reply_target: Message | CallbackQuery, plant_id: int, user_id: int, new_name: str | None, comment: str | None
+) -> None:
     async with get_session() as session:
         plant = await crud.get_plant(session, plant_id, user_id)
         if plant is None:
-            text = "⚠️ Растение уже удалено, возможно, кем-то другим."
-            if isinstance(message_or_callback, CallbackQuery):
-                await message_or_callback.message.edit_text(text)
-            else:
-                await message_or_callback.answer(text)
+            await reply(reply_target, "⚠️ Растение уже удалено, возможно, кем-то другим.", None)
             return
 
         old_name = plant.name
@@ -58,10 +56,7 @@ async def _apply_edit(message_or_callback, plant_id: int, user_id: int, new_name
     else:
         notice = f"💬 «{final_name}»: комментарий убран"
 
-    if isinstance(message_or_callback, CallbackQuery):
-        await message_or_callback.message.edit_text(notice)
-    else:
-        await message_or_callback.answer(notice)
+    await reply(reply_target, notice, None)
 
 
 async def handle_edit_plant_intent(

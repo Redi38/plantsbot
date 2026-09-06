@@ -11,6 +11,7 @@ from bot.config import config
 from bot.db.database import init_db
 from bot.handlers import ai_agent, groups, import_, list_view, plants
 from bot.middlewares.user import UserMiddleware
+from bot.services import ai_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -53,7 +54,10 @@ async def main() -> None:
     dp.include_router(ai_agent.router)
 
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await ai_service.close_session()
 
 
 if __name__ == "__main__":

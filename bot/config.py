@@ -17,7 +17,7 @@ class Config:
 
 
 def load_config() -> Config:
-    return Config(
+    cfg = Config(
         bot_token=os.environ["BOT_TOKEN"],
         database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./plants.db"),
         ai_enabled=os.getenv("AI_ENABLED", "false").lower() == "true",
@@ -25,6 +25,12 @@ def load_config() -> Config:
         ai_api_base_url=os.getenv("AI_API_BASE_URL", "https://api.openai.com/v1"),
         ai_model=os.getenv("AI_MODEL", "gpt-4o-mini"),
     )
+    if cfg.ai_enabled and not cfg.ai_api_key:
+        raise ValueError(
+            "AI_ENABLED=true, но AI_API_KEY не задан — ИИ-агент упадёт при первом же "
+            "обращении. Укажи AI_API_KEY в .env или выключи AI_ENABLED."
+        )
+    return cfg
 
 
 config = load_config()

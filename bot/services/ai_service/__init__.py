@@ -17,7 +17,7 @@ import json
 from bot.config import config
 
 from .cache import cache_get, cache_key, cache_set
-from .client import call_api, extract_json
+from .client import call_api, close_session, extract_json
 from .exceptions import AIServiceRateLimited, AIServiceTimeout, AIServiceUnavailable
 from .prompt import _MAX_PLANTS_IN_PROMPT, build_system_prompt, select_relevant_plants
 
@@ -25,6 +25,7 @@ __all__ = [
     "AIServiceRateLimited",
     "AIServiceTimeout",
     "AIServiceUnavailable",
+    "close_session",
     "parse_intent",
 ]
 
