@@ -1,10 +1,11 @@
-FROM python:3.14-slim AS base
+FROM python:3.12-slim AS base
 
 WORKDIR /app
 
 COPY requirements/bot.txt ./requirements-bot.txt
 COPY requirements/admin.txt ./requirements-admin.txt
-RUN pip install --no-cache-dir -r requirements-bot.txt -r requirements-admin.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements-bot.txt -r requirements-admin.txt
 
 COPY bot ./bot
 COPY admin ./admin

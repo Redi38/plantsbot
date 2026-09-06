@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/login")
 async def login_form(request: Request, next: str = "/"):
-    return templates.TemplateResponse("login.html", {"request": request, "next": next, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"next": next, "error": None})
 
 
 @router.post("/login")
@@ -22,8 +22,9 @@ async def login_submit(
 ):
     if not verify_credentials(username, password):
         return templates.TemplateResponse(
+            request,
             "login.html",
-            {"request": request, "next": next, "error": "Неверный логин или пароль"},
+            {"next": next, "error": "Неверный логин или пароль"},
             status_code=401,
         )
 

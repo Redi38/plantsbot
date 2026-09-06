@@ -26,7 +26,7 @@ async def users_list(request: Request, _: str = Depends(require_auth)):
                 {"user": user, "group_count": len(groups), "plant_count": plant_count(groups, ungrouped)}
             )
     return templates.TemplateResponse(
-        "users.html", {"request": request, "cards": cards}
+        request, "users.html", {"cards": cards}
     )
 
 
@@ -41,9 +41,9 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
     err = request.query_params.get("err")
     count = plant_count(groups, ungrouped)
     return templates.TemplateResponse(
+        request,
         "user_detail.html",
         {
-            "request": request,
             "user": user,
             "groups": groups,
             "ungrouped": ungrouped,

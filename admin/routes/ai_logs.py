@@ -17,5 +17,5 @@ async def ai_logs_list(request: Request, _: str = Depends(require_auth)):
     async with get_session() as session:
         entries = await crud.list_ai_logs_all(session, limit=200)
     return templates.TemplateResponse(
-        "ai_logs.html", {"request": request, "entries": entries}
+        request, "ai_logs.html", {"entries": entries}
     )
