@@ -7,7 +7,6 @@ class AIServiceUnavailable(Exception):
 
 class AIServiceTimeout(AIServiceUnavailable):
     """Отдельно от прочих ошибок — нет смысла повторять запрос при таймауте сети."""
-    pass
 
 
 class AIServiceRateLimited(AIServiceUnavailable):
@@ -15,4 +14,3 @@ class AIServiceRateLimited(AIServiceUnavailable):
     (см. client.py) — наружу это исключение долетает только если провайдер
     отказал повторно и ждать ещё раз уже нет смысла в рамках одного
     пользовательского запроса."""
-    pass

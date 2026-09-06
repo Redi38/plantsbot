@@ -86,10 +86,11 @@ def parse_markdown(raw_text: str) -> list[ImportRow]:
         if not line:
             continue
 
-        if line.startswith("-") or line.startswith("*"):
+        if line.startswith(("-", "*")):
             content = line.lstrip("-*").strip()
             if not content:
                 continue
+            comment: str | None
             if ":" in content:
                 name, comment = content.split(":", 1)
                 name = name.strip()

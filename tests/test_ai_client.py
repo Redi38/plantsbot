@@ -4,7 +4,6 @@ import pytest
 
 from bot.services.ai_service.client import _parse_retry_after, extract_json
 
-
 # --- extract_json ----------------------------------------------------------
 
 

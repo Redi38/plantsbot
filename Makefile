@@ -1,6 +1,6 @@
 COMPOSE = docker compose
 
-.PHONY: up down restart bot admin build logs logs-bot logs-admin ps stop clean test
+.PHONY: up down restart bot admin build logs logs-bot logs-admin ps stop clean test lint typecheck ci
 
 ## Поднять всё (бот + админка), с пересборкой
 up:
@@ -36,6 +36,18 @@ ps:
 ## Прогнать тесты
 test:
 	pytest
+
+## Проверить стиль и импорты линтером (ruff)
+lint:
+	ruff check .
+
+## Проверить типы (mypy) отдельно для bot и admin
+typecheck:
+	mypy bot
+	mypy admin
+
+## Прогнать все проверки разом (как в GitHub Actions): lint + typecheck + test
+ci: lint typecheck test
 
 ## Логи всех сервисов (следить)
 logs:

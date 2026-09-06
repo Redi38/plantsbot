@@ -1,6 +1,5 @@
 from bot.services.ai_service.prompt import build_system_prompt, select_relevant_plants
 
-
 # --- build_system_prompt --------------------------------------------------
 
 

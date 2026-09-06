@@ -1,6 +1,6 @@
-from typing import Callable
+from collections.abc import Callable
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db.models import Group

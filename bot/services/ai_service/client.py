@@ -78,26 +78,25 @@ async def call_api(
         payload["response_format"] = {"type": "json_object"}
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{config.ai_api_base_url}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=30),
-            ) as resp:
-                text = await resp.text()
-                if resp.status == 429:
-                    if _retry_on_rate_limit:
-                        wait_seconds = min(_parse_retry_after(text), 25.0) + 0.5
-                        await asyncio.sleep(wait_seconds)
-                        return await call_api(
-                            user_text, use_json_mode, system_prompt, _retry_on_rate_limit=False
-                        )
-                    raise AIServiceRateLimited(f"AI API rate limit не прошёл даже после ожидания: {text}")
-                if resp.status != 200:
-                    raise AIServiceUnavailable(f"AI API error {resp.status}: {text}")
-                data = json.loads(text)
-    except asyncio.TimeoutError as e:
+        async with aiohttp.ClientSession() as session, session.post(
+            f"{config.ai_api_base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            text = await resp.text()
+            if resp.status == 429:
+                if _retry_on_rate_limit:
+                    wait_seconds = min(_parse_retry_after(text), 25.0) + 0.5
+                    await asyncio.sleep(wait_seconds)
+                    return await call_api(
+                        user_text, use_json_mode, system_prompt, _retry_on_rate_limit=False
+                    )
+                raise AIServiceRateLimited(f"AI API rate limit не прошёл даже после ожидания: {text}")
+            if resp.status != 200:
+                raise AIServiceUnavailable(f"AI API error {resp.status}: {text}")
+            data = json.loads(text)
+    except TimeoutError as e:
         raise AIServiceTimeout(
             f"AI API не ответил за 30 секунд ({config.ai_api_base_url}) — "
             "похоже, сервер не может достучаться до хоста (проверь сеть/файрвол)"

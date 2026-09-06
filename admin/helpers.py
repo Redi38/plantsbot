@@ -1,10 +1,9 @@
 from fastapi import HTTPException
 from fastapi.responses import RedirectResponse
 
+from admin.database import get_session
 from bot.db import crud
 from bot.db.models import Group, Plant
-
-from admin.database import get_session
 
 
 def group_anchor(group_id: int | None) -> str:

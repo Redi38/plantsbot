@@ -8,7 +8,8 @@ bot/db/crud.py), и для растений (см. bot/handlers/ai_agent/delete_
 """
 
 import difflib
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 T = TypeVar("T")
 
@@ -19,7 +20,7 @@ def fuzzy_find(
     items: list[T],
     query: str,
     *,
-    key: Callable[[T], str] = lambda item: item.name,
+    key: Callable[[T], str] = lambda item: item.name,  # type: ignore[attr-defined]
     fuzzy_cutoff: float = DEFAULT_FUZZY_CUTOFF,
 ) -> list[T]:
     """Ищет элементы, чьё название (key(item)) соответствует query, по

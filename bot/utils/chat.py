@@ -6,6 +6,8 @@
 Id "рабочего" сообщения бота хранится в FSMContext (ключ _KEY), поэтому
 переживает переходы между состояниями стейт-машины."""
 
+import contextlib
+
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -18,10 +20,8 @@ async def safe_delete_message(bot, chat_id: int, message_id: int) -> None:
     существует (удалено раньше, слишком старое для Telegram API и т.п.) —
     этот try/except повторялся почти дословно во всех хендлерах, где нужно
     подчистить предыдущий шаг диалога."""
-    try:
+    with contextlib.suppress(TelegramBadRequest):
         await bot.delete_message(chat_id=chat_id, message_id=message_id)
-    except TelegramBadRequest:
-        pass
 
 
 async def safe_edit_text(message: Message, text: str, reply_markup=None) -> None:
@@ -29,10 +29,8 @@ async def safe_edit_text(message: Message, text: str, reply_markup=None) -> None
     типично когда пользователь успел нажать другую кнопку/сообщение уже
     неактуально. Тот же паттерн, что и safe_delete_message, но для правки
     текста вместо удаления."""
-    try:
+    with contextlib.suppress(TelegramBadRequest):
         await message.edit_text(text, reply_markup=reply_markup)
-    except TelegramBadRequest:
-        pass
 
 
 async def begin_dialog(state: FSMContext) -> int | None:
@@ -59,14 +57,15 @@ async def render(message: Message, state: FSMContext, text: str, reply_markup=No
         await safe_delete_message(message.bot, message.chat.id, msg_id)
 
     sent = await message.answer(text, reply_markup=reply_markup)
-    await state.update_data(**{_KEY: sent.message_id})
+    await state.update_data({_KEY: sent.message_id})
 
 
 async def track_callback(callback: CallbackQuery, state: FSMContext) -> None:
     """Запоминает сообщение под инлайн-клавиатурой (которое callback только
     что отредактировал) как рабочее — чтобы последующий render() в этом же
     диалоге знал, какое сообщение бота удалить перед следующим шагом."""
-    await state.update_data(**{_KEY: callback.message.message_id})
+    if callback.message is not None:
+        await state.update_data({_KEY: callback.message.message_id})
 
 
 async def pop_tracked(state: FSMContext) -> int | None:

@@ -22,10 +22,10 @@ from .exceptions import AIServiceRateLimited, AIServiceTimeout, AIServiceUnavail
 from .prompt import _MAX_PLANTS_IN_PROMPT, build_system_prompt, select_relevant_plants
 
 __all__ = [
-    "parse_intent",
-    "AIServiceUnavailable",
-    "AIServiceTimeout",
     "AIServiceRateLimited",
+    "AIServiceTimeout",
+    "AIServiceUnavailable",
+    "parse_intent",
 ]
 
 
@@ -61,9 +61,9 @@ async def parse_intent(
 
     try:
         intent = extract_json(content)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
         if not used_json_mode:
-            raise AIServiceUnavailable(f"ИИ вернул не-JSON ответ: {content}")
+            raise AIServiceUnavailable(f"ИИ вернул не-JSON ответ: {content}") from e
         content = await call_api(user_text, use_json_mode=False, system_prompt=system_prompt)
         try:
             intent = extract_json(content)

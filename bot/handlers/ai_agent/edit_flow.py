@@ -40,7 +40,7 @@ async def _apply_edit(message_or_callback, plant_id: int, user_id: int, new_name
             return
 
         old_name = plant.name
-        kwargs = {}
+        kwargs: dict[str, str | None] = {}
         if new_name:
             kwargs["name"] = new_name
         if comment is not None:

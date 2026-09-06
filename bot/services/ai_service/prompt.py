@@ -171,7 +171,8 @@ def select_relevant_plants(user_text: str, existing_plants: list[str], limit: in
     text_lower = user_text.lower()
     text_words = [w for w in re.findall(r"[a-zа-яё]{3,}", text_lower)]
 
-    relevant, rest = [], []
+    relevant: list[str] = []
+    rest: list[str] = []
     for name in existing_plants:
         name_lower = name.lower()
         is_relevant = name_lower in text_lower or any(word in name_lower for word in text_words)

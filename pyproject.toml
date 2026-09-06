@@ -1,0 +1,35 @@
+[project]
+name = "plantsbot"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "PIE", "RUF"]
+ignore = [
+    "B008",   # FastAPI relies on function calls (Depends/File/Form) in argument defaults
+    "EXE001", # docker-entrypoint.py is invoked via `python docker-entrypoint.py`, not executed directly
+    "RUF001", # codebase and comments are in Russian - Cyrillic isn't "ambiguous" here
+    "RUF002",
+    "RUF003",
+    "UP047", # PEP 695 generic syntax (def f[T](...)) is a style choice, not a correctness issue
+    "UP017", # datetime.UTC needs Python 3.11+; project supports 3.10 despite Dockerfile using 3.12
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["F401", "E501"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+exclude = ["^tests/"]
+
+[[tool.mypy.overrides]]
+module = "bot.handlers.*"
+disable_error_code = ["union-attr", "arg-type"]

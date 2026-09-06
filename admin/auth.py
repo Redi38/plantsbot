@@ -16,10 +16,6 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 ADMIN_USER = os.environ["ADMIN_USER"]
 ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
-# используется только для подписи cookie-сессии, не для хранения паролей —
-# при желании можно зафиксировать через ADMIN_SECRET_KEY в .env, иначе
-# генерируется при каждом запуске контейнера (тогда все сессии сбрасываются
-# при рестарте — не критично для личной админки на 1-2 человека)
 SECRET_KEY = os.getenv("ADMIN_SECRET_KEY") or secrets.token_hex(32)
 
 SESSION_COOKIE = "admin_session"
@@ -51,6 +47,6 @@ def require_auth(request: Request) -> str:
         raise AuthRequired()
     try:
         username: str = _serializer.loads(token, max_age=SESSION_MAX_AGE)
-    except (BadSignature, SignatureExpired):
-        raise AuthRequired()
+    except (BadSignature, SignatureExpired) as e:
+        raise AuthRequired() from e
     return username
