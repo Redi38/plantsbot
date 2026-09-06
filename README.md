@@ -6,6 +6,56 @@ editing plants, and a free-form AI agent layered on top of the main
 button-based flow. Alongside it — a FastAPI web admin panel for the same
 data.
 
+## Using the bot
+
+The main menu has three buttons: **📋 List**, **➕ Add**, **📥 Import**.
+Besides those: `/start` — greeting and menu, `/cancel_import` — cancel an
+active import. Everything else (deleting, renaming, editing) is done via
+buttons inside the **📋 List** tree, or with free-form text through the AI
+agent (see below).
+
+## Import format
+
+**CSV** (with header):
+```csv
+group,name,comment
+Alocasias,Alocasia Polly,repotted in March
+Alocasias,Alocasia Odora,
+Succulents,Haworthia,
+```
+
+**Text / markdown:**
+```
+Alocasias:
+- Alocasia Polly: repotted in March
+- Alocasia Odora
+
+Succulents:
+- Haworthia
+```
+
+In both cases, before saving the bot shows a preview: which groups are new,
+which matched existing ones (case-insensitive comparison, with whitespace
+trimmed) — and asks for confirmation.
+
+## AI agent
+
+If `AI_ENABLED=true` and `AI_API_KEY` is set, any message outside an active
+flow is run through `ai_service.parse_intent()` — it works with any
+OpenAI-compatible API (OpenAI, DeepSeek, OpenRouter, etc. — just change
+`AI_API_BASE_URL` and `AI_MODEL` in `.env`).
+
+Supported intents: add a plant, delete a plant, create a group, rename a
+group, delete a group, change a plant's name/comment, show a filtered list.
+
+Examples:
+- "add alocasia polly, repotted in march" → adds it to the "Alocasias" group
+  with a comment
+- "delete haworthia" → deletes it if the match is unambiguous (otherwise
+  offers a choice among matches)
+- "rename group succulents to cacti" → renames the group
+- "show all alocasias" → filtered list
+
 ## Structure
 
 <details>
@@ -60,48 +110,6 @@ tests/                         # pytest, isolated in-memory SQLite per test
 
 </details>
 
-## Running locally
-
-```bash
-git clone https://github.com/Redi38/plantsbot.git
-cd plantsbot
-python -m venv venv && source venv/bin/activate
-pip install -r requirements/bot.txt
-
-cp .env.example .env
-# fill in BOT_TOKEN (required) and AI_API_KEY (if you want the AI agent)
-
-python -m bot.main
-```
-
-## Running in Docker
-
-```bash
-cp .env.example .env
-# fill in .env
-
-make up
-# same as: docker compose up -d --build
-```
-
-The SQLite file lives in the named volume `plant_bot_data`, so data survives
-container rebuilds. `docker compose up` brings up two containers — `bot` and
-`admin` — sharing the same volume.
-
-## Development
-
-```bash
-pip install -r requirements/bot.txt -r requirements/admin.txt -r requirements/dev.txt
-
-make test        # pytest
-make lint        # ruff check .
-make typecheck    # mypy bot && mypy admin
-make ci           # everything together — same as what CI runs on GitHub
-```
-
-Other commands — `make up` / `make down` / `make logs` / `make ps`, etc. —
-see the `Makefile`.
-
 ## Web admin panel
 
 A separate `admin` service (FastAPI + Jinja2, no JS frameworks) for quickly
@@ -131,63 +139,67 @@ If you decide to expose the port directly to the internet (not recommended
 without HTTPS), change `127.0.0.1:8080:8080` to `8080:8080` in
 `docker-compose.yml`.
 
-## Using the bot
+<details>
+<summary>Running locally</summary>
 
-The main menu has three buttons: **📋 List**, **➕ Add**, **📥 Import**.
-Besides those: `/start` — greeting and menu, `/cancel_import` — cancel an
-active import. Everything else (deleting, renaming, editing) is done via
-buttons inside the **📋 List** tree, or with free-form text through the AI
-agent (see below).
+```bash
+git clone https://github.com/Redi38/plantsbot.git
+cd plantsbot
+python -m venv venv && source venv/bin/activate
+pip install -r requirements/bot.txt
 
-## Import format
+cp .env.example .env
+# fill in BOT_TOKEN (required) and AI_API_KEY (if you want the AI agent)
 
-**CSV** (with header):
-```csv
-group,name,comment
-Alocasias,Alocasia Polly,repotted in March
-Alocasias,Alocasia Odora,
-Succulents,Haworthia,
+python -m bot.main
 ```
 
-**Text / markdown:**
+</details>
+
+<details>
+<summary>Running in Docker</summary>
+
+```bash
+cp .env.example .env
+# fill in .env
+
+make up
+# same as: docker compose up -d --build
 ```
-Alocasias:
-- Alocasia Polly: repotted in March
-- Alocasia Odora
 
-Succulents:
-- Haworthia
+The SQLite file lives in the named volume `plant_bot_data`, so data survives
+container rebuilds. `docker compose up` brings up two containers — `bot` and
+`admin` — sharing the same volume.
+
+</details>
+
+<details>
+<summary>Development</summary>
+
+```bash
+pip install -r requirements/bot.txt -r requirements/admin.txt -r requirements/dev.txt
+
+make test        # pytest
+make lint        # ruff check .
+make typecheck    # mypy bot && mypy admin
+make ci           # everything together — same as what CI runs on GitHub
 ```
 
-In both cases, before saving the bot shows a preview: which groups are new,
-which matched existing ones (case-insensitive comparison, with whitespace
-trimmed) — and asks for confirmation.
+Other commands — `make up` / `make down` / `make logs` / `make ps`, etc. —
+see the `Makefile`.
 
-## AI agent
+</details>
 
-If `AI_ENABLED=true` and `AI_API_KEY` is set, any message outside an active
-flow is run through `ai_service.parse_intent()` — it works with any
-OpenAI-compatible API (OpenAI, DeepSeek, OpenRouter, etc. — just change
-`AI_API_BASE_URL` and `AI_MODEL` in `.env`).
-
-Supported intents: add a plant, delete a plant, create a group, rename a
-group, delete a group, change a plant's name/comment, show a filtered list.
-
-Examples:
-- "add alocasia polly, repotted in march" → adds it to the "Alocasias" group
-  with a comment
-- "delete haworthia" → deletes it if the match is unambiguous (otherwise
-  offers a choice among matches)
-- "rename group succulents to cacti" → renames the group
-- "show all alocasias" → filtered list
-
-## Tests and CI
+<details>
+<summary>Tests and CI</summary>
 
 `make test` runs pytest against an isolated in-memory SQLite (no network, no
 real AI API). `.github/workflows/ci.yml` runs three independent jobs on every
 push/PR to `main`: `ruff check .`, `mypy` (separately for `bot` and `admin`),
 and pytest itself.
 
+</details>
+
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT [LICENSE](LICENSE).
