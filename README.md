@@ -30,9 +30,12 @@ admin/                    # веб-админка (FastAPI), деплоится 
 ├── main.py                # роуты
 ├── database.py             # своё подключение к той же БД (без зависимости от bot.config)
 ├── auth.py                 # HTTP Basic Auth
-├── requirements.txt
-├── Dockerfile
 └── templates/
+
+requirements/              # requirements.txt бота, админки и дев-зависимостей — в одном месте
+├── bot.txt
+├── admin.txt
+└── dev.txt                # pytest — для тестов, в рантайме не нужен
 ```
 
 ## Запуск локально
@@ -40,7 +43,7 @@ admin/                    # веб-админка (FastAPI), деплоится 
 ```bash
 cd plant_bot
 python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/bot.txt
 
 cp .env.example .env
 # впиши BOT_TOKEN (обязательно) и AI_API_KEY (если хочешь ИИ-агента)
@@ -114,9 +117,3 @@ group,name,comment
 Примеры:
 - «добавь алоказию полли, пересадила в марте» → добавит в группу «Алоказии» с комментарием
 - «удали хавортию» → удалит, если находится однозначно
-
-## Что можно добавить дальше
-
-- Пагинацию для `/list`, если растений станет много (>30-40)
-- Alembic, если понадобятся миграции схемы (сейчас таблицы создаются через `create_all` при старте)
-- Мультиязычность (поле `User.language` уже заложено в модели)

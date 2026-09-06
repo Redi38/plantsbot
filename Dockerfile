@@ -2,8 +2,8 @@ FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-COPY requirements.txt ./requirements-bot.txt
-COPY admin/requirements.txt ./requirements-admin.txt
+COPY requirements/bot.txt ./requirements-bot.txt
+COPY requirements/admin.txt ./requirements-admin.txt
 RUN pip install --no-cache-dir -r requirements-bot.txt -r requirements-admin.txt
 
 COPY bot ./bot

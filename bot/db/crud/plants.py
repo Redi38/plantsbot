@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,16 +31,25 @@ async def find_plant_by_name(
     """Ищет растение с таким же именем (без учёта регистра) в той же
     группе (group_id=None -> среди растений без группы) — используется
     для проверки на повтор перед добавлением. Раз дубли разрешены (по
-    подтверждению), совпадений может быть несколько — берём первое,
-    а не scalar_one_or_none(), который упал бы с ошибкой на 2+."""
+    подтверждению), совпадений может быть несколько — берём первое.
+
+    Сравнение через func.lower() в SQL здесь не подходит: встроенный
+    LOWER() в SQLite приводит к нижнему регистру только ASCII-символы
+    (без расширения ICU кириллица не трогается вообще), а бот целиком
+    русскоязычный, и почти все названия растений начинаются с заглавной
+    кириллической буквы (боту прямо говорят предлагать имя "с заглавной
+    буквы" в промпте ai_service) — то есть проверка на дубль молчала бы
+    всегда. Та же оговорка и тот же фикс, что и в get_group_by_name
+    ниже: регистронезависимость считается в Python, где str.lower()
+    работает с Unicode корректно."""
+    normalized = name.strip().lower()
     result = await session.execute(
-        select(Plant).where(
-            Plant.user_id == user_id,
-            Plant.group_id == group_id,
-            func.lower(Plant.name) == name.strip().lower(),
-        )
+        select(Plant).where(Plant.user_id == user_id, Plant.group_id == group_id)
     )
-    return result.scalars().first()
+    for plant in result.scalars():
+        if plant.name.strip().lower() == normalized:
+            return plant
+    return None
 
 
 async def find_plant_by_name_any_group(
@@ -48,14 +57,15 @@ async def find_plant_by_name_any_group(
 ) -> Plant | None:
     """Как find_plant_by_name, но без учёта группы — ищет совпадение
     по имени среди всех растений пользователя. Используется для ранней
-    проверки на повтор сразу после ввода названия, ещё до выбора группы."""
-    result = await session.execute(
-        select(Plant).where(
-            Plant.user_id == user_id,
-            func.lower(Plant.name) == name.strip().lower(),
-        )
-    )
-    return result.scalars().first()
+    проверки на повтор сразу после ввода названия, ещё до выбора группы.
+    См. докстринг find_plant_by_name про то, почему сравнение — в Python,
+    а не через func.lower() в SQL."""
+    normalized = name.strip().lower()
+    result = await session.execute(select(Plant).where(Plant.user_id == user_id))
+    for plant in result.scalars():
+        if plant.name.strip().lower() == normalized:
+            return plant
+    return None
 
 
 async def delete_plant(session: AsyncSession, plant: Plant) -> None:

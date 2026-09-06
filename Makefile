@@ -1,6 +1,6 @@
 COMPOSE = docker compose
 
-.PHONY: up down restart bot admin build logs logs-bot logs-admin ps stop clean
+.PHONY: up down restart bot admin build logs logs-bot logs-admin ps stop clean test
 
 ## Поднять всё (бот + админка), с пересборкой
 up:
@@ -32,6 +32,10 @@ restart: down up
 ## Статус контейнеров
 ps:
 	$(COMPOSE) ps
+
+## Прогнать тесты
+test:
+	pytest
 
 ## Логи всех сервисов (следить)
 logs:
