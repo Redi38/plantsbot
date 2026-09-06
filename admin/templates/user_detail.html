@@ -109,7 +109,7 @@
           <form class="inline" method="post" action="/groups/{{ group.id }}/delete-with-plants"
                 data-confirm="Удалить группу «{{ group.name }}» ВМЕСТЕ со всеми растениями внутри ({{ group.plants|length }} шт.)? Это необратимо.">
             <input type="hidden" name="user_id" value="{{ user.id }}">
-            <button type="submit" class="danger">Удалить группу и растения</button>
+            <button type="submit" class="danger danger--severe">Удалить группу и растения</button>
           </form>
         </div>
       </details>
@@ -214,7 +214,7 @@
     </p>
     <form method="post" action="/users/{{ user.id }}/delete"
           data-confirm="Удалить ВСЮ базу растений пользователя «{{ user.display_name }}» — {{ groups|length }} групп и {{ plant_count }} растений? Сам пользователь останется. Это необратимо.">
-      <button type="submit" class="danger">Очистить базу пользователя</button>
+      <button type="submit" class="danger danger--severe">Очистить базу пользователя</button>
     </form>
   </div>
 {% endblock %}

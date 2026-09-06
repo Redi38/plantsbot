@@ -11,7 +11,13 @@
     await crud.get_group(session, group_id, user_id)
 """
 
-from .ai_logs import create_ai_log, list_ai_logs_all, list_ai_logs_for_user
+from .ai_logs import (
+    count_ai_logs_all,
+    create_ai_log,
+    list_ai_log_actions,
+    list_ai_logs_all,
+    list_ai_logs_for_user,
+)
 from .groups import (
     create_group,
     delete_group,
@@ -33,10 +39,18 @@ from .plants import (
     get_plant,
     update_plant,
 )
-from .users import clear_user_plants, get_or_create_user, get_user, list_users, set_ungrouped_label
+from .users import (
+    clear_user_plants,
+    get_last_activity_map,
+    get_or_create_user,
+    get_user,
+    list_users,
+    set_ungrouped_label,
+)
 
 __all__ = [
     "clear_user_plants",
+    "count_ai_logs_all",
     "create_ai_log",
     "create_group",
     "create_plant",
@@ -49,10 +63,12 @@ __all__ = [
     "get_full_tree",
     "get_group",
     "get_group_by_name",
+    "get_last_activity_map",
     "get_or_create_group",
     "get_or_create_user",
     "get_plant",
     "get_user",
+    "list_ai_log_actions",
     "list_ai_logs_all",
     "list_ai_logs_for_user",
     "list_groups",

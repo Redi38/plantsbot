@@ -2,10 +2,25 @@
 {% block content %}
   <a class="back" href="/">← Все пользователи</a>
   <h1>Логи ИИ-агента</h1>
-  <p class="muted">Последние {{ entries|length }} обращений пользователей к свободному тексту — что написали и что распознал агент. Полезно для доработки системного промпта.</p>
+  <p class="muted">Всего обращений: {{ total }}. Последние формулировки пользователей и то, что распознал агент — полезно для доработки системного промпта.</p>
+
+  <div class="card" id="ai-log-filter-card">
+    <form class="ai-log-filter" method="get" action="/ai-logs">
+      <label class="field-label" for="ai-log-filter-select">Показать:</label>
+      <select id="ai-log-filter-select" name="action" onchange="this.form.submit()">
+        <option value="" {% if not action_filter %}selected{% endif %}>Все</option>
+        <option value="{{ filter_error }}" {% if action_filter == filter_error %}selected{% endif %}>Только ошибки</option>
+        <option value="{{ filter_unknown }}" {% if action_filter == filter_unknown %}selected{% endif %}>Только unknown</option>
+        {% for a in known_actions %}
+          <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+      <noscript><input type="submit" class="primary" value="Применить"></noscript>
+    </form>
+  </div>
 
   {% if not entries %}
-    <p class="empty">Пока обращений не было.</p>
+    <p class="empty">{% if action_filter %}Ничего не найдено по этому фильтру.{% else %}Пока обращений не было.{% endif %}</p>
   {% else %}
     <ul class="ai-logs">
       {% for log, user in entries %}
@@ -37,5 +52,22 @@
         </li>
       {% endfor %}
     </ul>
+
+    {% if total_pages > 1 %}
+      {% macro page_url(p) %}/ai-logs?page={{ p }}{% if action_filter %}&action={{ action_filter }}{% endif %}{% endmacro %}
+      <nav class="pagination">
+        {% if page > 1 %}
+          <a href="{{ page_url(page - 1) }}" class="pagination-link">← Раньше</a>
+        {% else %}
+          <span class="pagination-link pagination-link--disabled">← Раньше</span>
+        {% endif %}
+        <span class="muted pagination-status">Страница {{ page }} из {{ total_pages }}</span>
+        {% if page < total_pages %}
+          <a href="{{ page_url(page + 1) }}" class="pagination-link">Позже →</a>
+        {% else %}
+          <span class="pagination-link pagination-link--disabled">Позже →</span>
+        {% endif %}
+      </nav>
+    {% endif %}
   {% endif %}
 {% endblock %}

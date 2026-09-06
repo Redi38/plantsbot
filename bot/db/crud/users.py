@@ -1,7 +1,9 @@
-from sqlalchemy import delete, select, update
+from datetime import datetime
+
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db.models import Group, Plant, User
+from bot.db.models import AiLog, Group, Plant, User
 
 
 async def get_or_create_user(
@@ -41,6 +43,29 @@ async def list_users(session: AsyncSession) -> list[User]:
 async def get_user(session: AsyncSession, user_id: int) -> User | None:
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
+
+
+async def get_last_activity_map(session: AsyncSession) -> dict[int, datetime]:
+    """Дата последней активности по каждому пользователю — максимум между
+    последним добавленным растением и последним обращением к ИИ-агенту
+    (ai_logs пишутся даже когда агент не понял запрос, так что это ловит
+    и тех, кто просто писал боту, ничего не добавив). Две bulk-агрегации
+    вместо N+1 по пользователям, объединяются в памяти — их обычно не
+    много, а результат используется только для отображения в списке."""
+    plants_result = await session.execute(
+        select(Plant.user_id, func.max(Plant.created_at)).group_by(Plant.user_id)
+    )
+    logs_result = await session.execute(
+        select(AiLog.user_id, func.max(AiLog.created_at)).group_by(AiLog.user_id)
+    )
+
+    activity: dict[int, datetime] = {}
+    for user_id, last_created in [*plants_result.all(), *logs_result.all()]:
+        if last_created is None:
+            continue
+        if user_id not in activity or last_created > activity[user_id]:
+            activity[user_id] = last_created
+    return activity
 
 
 async def clear_user_plants(session: AsyncSession, user_id: int) -> None:

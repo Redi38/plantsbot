@@ -3,11 +3,11 @@ import io
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.requests import Request
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from admin.auth import require_auth
 from admin.database import get_session
-from admin.helpers import get_user_or_404, plant_count, user_redirect
+from admin.helpers import get_user_or_404, plant_count, redirect_with, user_redirect
 from admin.templating import templates
 from bot.db import crud
 from bot.services import import_service, plant_service
@@ -19,11 +19,17 @@ router = APIRouter()
 async def users_list(request: Request, _: str = Depends(require_auth)):
     async with get_session() as session:
         users = await crud.list_users(session)
+        last_activity = await crud.get_last_activity_map(session)
         cards = []
         for user in users:
             groups, ungrouped = await crud.get_full_tree(session, user.id)
             cards.append(
-                {"user": user, "group_count": len(groups), "plant_count": plant_count(groups, ungrouped)}
+                {
+                    "user": user,
+                    "group_count": len(groups),
+                    "plant_count": plant_count(groups, ungrouped),
+                    "last_activity": last_activity.get(user.id),
+                }
             )
     return templates.TemplateResponse(
         request, "users.html", {"cards": cards}
@@ -65,7 +71,7 @@ async def delete_user(user_id: int, _: str = Depends(require_auth)):
         await get_user_or_404(session, user_id)
         await crud.clear_user_plants(session, user_id)
         await session.commit()
-    return RedirectResponse(f"/users/{user_id}?msg=База очищена", status_code=303)
+    return redirect_with(f"/users/{user_id}", msg="База очищена")
 
 
 @router.get("/users/{user_id}/export.csv")
@@ -115,7 +121,7 @@ async def import_plants(
         raw = text.strip()
 
     if not raw:
-        return RedirectResponse(f"/users/{user_id}?err=Нет данных для импорта", status_code=303)
+        return redirect_with(f"/users/{user_id}", err="Нет данных для импорта")
 
     first_line = raw.splitlines()[0].lower().strip()
     looks_like_csv = "name" in first_line and ("," in first_line or ";" in first_line)
@@ -127,11 +133,11 @@ async def import_plants(
         # есть — так понятнее, что не так с самим CSV, вместо попытки
         # угадать markdown-формат там, где его точно нет.
         if looks_like_csv:
-            return RedirectResponse(f"/users/{user_id}?err={exc}", status_code=303)
+            return redirect_with(f"/users/{user_id}", err=str(exc))
         try:
             rows = import_service.parse_markdown(raw)
         except import_service.ImportParseError as exc2:
-            return RedirectResponse(f"/users/{user_id}?err={exc2}", status_code=303)
+            return redirect_with(f"/users/{user_id}", err=str(exc2))
 
     async with get_session() as session:
         user = await get_user_or_404(session, user_id)
@@ -141,7 +147,7 @@ async def import_plants(
     msg = f"Импортировано {count} растений"
     if skipped:
         msg += f", пропущено {skipped} дублей"
-    return RedirectResponse(f"/users/{user_id}?msg={msg}", status_code=303)
+    return redirect_with(f"/users/{user_id}", msg=msg)
 
 
 @router.post("/users/{user_id}/ungrouped-label")

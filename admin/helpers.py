@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from fastapi import HTTPException
 from fastapi.responses import RedirectResponse
 
@@ -16,6 +18,17 @@ def group_anchor(group_id: int | None) -> str:
 def user_redirect(user_id: int, anchor: str | None = None) -> RedirectResponse:
     url = f"/users/{user_id}#{anchor}" if anchor else f"/users/{user_id}"
     return RedirectResponse(url, status_code=303)
+
+
+def redirect_with(url: str, status_code: int = 303, **params) -> RedirectResponse:
+    """RedirectResponse с query-параметрами, безопасно закодированными через
+    urlencode — в отличие от f"{url}?msg={msg}", не ломается, если значение
+    когда-нибудь будет содержать &, # или %. None-значения пропускаются,
+    чтобы не плодить msg=None/err=None в адресной строке."""
+    query = {key: value for key, value in params.items() if value is not None}
+    if query:
+        url = f"{url}?{urlencode(query)}"
+    return RedirectResponse(url, status_code=status_code)
 
 
 async def with_group(user_id: int, group_id: int, mutate) -> Group | None:

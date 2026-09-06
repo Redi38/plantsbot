@@ -57,6 +57,49 @@
   });
 })();
 
+// ---------- Поиск по пользователям (страница /) ----------
+
+(function initUserSearch() {
+  const input = document.getElementById("user-search");
+  if (!input) return;
+
+  const clearBtn = document.getElementById("user-search-clear");
+  const countEl = document.getElementById("user-search-count");
+  const emptyEl = document.querySelector(".user-search-empty");
+  const cards = Array.from(document.querySelectorAll(".user-card"));
+
+  const normalize = (text) => text.trim().toLowerCase();
+
+  function applyFilter() {
+    const query = normalize(input.value);
+    clearBtn.hidden = query.length === 0;
+
+    if (!query) {
+      cards.forEach((card) => { card.style.display = ""; });
+      if (emptyEl) emptyEl.hidden = true;
+      countEl.textContent = "";
+      return;
+    }
+
+    let visibleCount = 0;
+    cards.forEach((card) => {
+      const matches = normalize(card.dataset.name || "").includes(query);
+      card.style.display = matches ? "" : "none";
+      if (matches) visibleCount += 1;
+    });
+
+    if (emptyEl) emptyEl.hidden = visibleCount > 0;
+    countEl.textContent = visibleCount > 0 ? `Найдено: ${visibleCount}` : "Ничего не найдено";
+  }
+
+  input.addEventListener("input", applyFilter);
+  clearBtn.addEventListener("click", () => {
+    input.value = "";
+    applyFilter();
+    input.focus();
+  });
+})();
+
 document.addEventListener("submit", (event) => {
   const form = event.target;
   if (!(form instanceof HTMLFormElement)) return;
