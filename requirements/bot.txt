@@ -2,4 +2,4 @@ aiogram==3.31.0
 SQLAlchemy==2.0.52
 aiosqlite==0.22.1
 aiohttp==3.10.5
-python-dotenv==1.0.1
+python-dotenv==1.2.3
