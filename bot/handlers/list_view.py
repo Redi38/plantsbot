@@ -78,28 +78,39 @@ async def list_menu_back(callback: CallbackQuery, user_id: int) -> None:
 
 # ---------- Просмотр конкретной группы (или "всё") с пагинацией ----------
 
-async def pages_for(user_id: int, token: str) -> tuple[str, list[str]] | None:
+async def pages_for(user_id: int, token: str, alpha: bool = False) -> tuple[str, list[str]] | None:
     async with get_session() as session:
         if token == "all":
-            return "Все растения", await plant_service.render_pages(session, user_id)
+            return "Все растения", await plant_service.render_pages(session, user_id, alpha)
         if token == "none":
-            return await plant_service.render_group_pages(session, user_id, None)
-        return await plant_service.render_group_pages(session, user_id, int(token))
+            return await plant_service.render_group_pages(session, user_id, None, alpha)
+        return await plant_service.render_group_pages(session, user_id, int(token), alpha)
 
 
-def group_pages_keyboard(token: str, page: int, total_pages: int):
+def group_pages_keyboard(token: str, page: int, total_pages: int, alpha: bool = False):
     builder = InlineKeyboardBuilder()
 
     pagination_row_size = 0
 
     def add_pagination():
         nonlocal pagination_row_size
-        pagination_row_size = add_pagination_buttons(builder, page, total_pages, lambda p: f"lgpage:{token}:{p}")
+        pagination_row_size = add_pagination_buttons(
+            builder, page, total_pages, lambda p: f"lgpage:{token}:{p}:{int(alpha)}"
+        )
 
     def add_crud():
         builder.button(text="➕ Добавить", callback_data=f"lgadd:{token}", style="success")
         builder.button(text="✏️ Изменить", callback_data=f"lgedit:{token}", style="primary")
         builder.button(text="🗑 Удалить", callback_data=f"lgdel:{token}", style="danger")
+
+    def add_sort():
+        # Кнопка переключает режим и остаётся на текущей странице; при
+        # выходе из просмотра (lg:{token}) сортировка сбрасывается на
+        # дефолтную — это осознанно, чтобы не тащить состояние через
+        # состояние FSM ради простоты.
+        next_alpha = not alpha
+        text = "🕒 По добавлению" if alpha else "🔤 По алфавиту"
+        builder.button(text=text, callback_data=f"lgsort:{token}:{page}:{int(next_alpha)}", style="primary")
 
     def add_rename_group():
         builder.button(text="✏️ Переименовать группу", callback_data=f"lgrename:{token}", style="primary")
@@ -113,8 +124,9 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
     if token == "all":
         add_crud()
         add_pagination()
+        add_sort()
         add_back()
-        row_sizes = [3] + ([pagination_row_size] if pagination_row_size else []) + [1]
+        row_sizes = [3] + ([pagination_row_size] if pagination_row_size else []) + [1, 1]
     else:
         if total_pages > 1:
             add_pagination()
@@ -128,6 +140,9 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
             add_rename_group()
             row_sizes.append(2)
 
+        add_sort()
+        row_sizes.append(1)
+
         add_back()
         row_sizes.append(1)
 
@@ -135,15 +150,17 @@ def group_pages_keyboard(token: str, page: int, total_pages: int):
     return builder.as_markup()
 
 
-async def show_group_page(callback: CallbackQuery, user_id: int, token: str, page: int) -> None:
-    result = await pages_for(user_id, token)
+async def show_group_page(callback: CallbackQuery, user_id: int, token: str, page: int, alpha: bool = False) -> None:
+    result = await pages_for(user_id, token, alpha)
     await callback.answer()
     if result is None:
         await callback.message.edit_text("⚠️ Группа не найдена, возможно уже удалена.")
         return
     _, pages = result
     page = max(1, min(page, len(pages)))
-    await safe_edit_text(callback.message, pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages)))
+    await safe_edit_text(
+        callback.message, pages[page - 1], reply_markup=group_pages_keyboard(token, page, len(pages), alpha)
+    )
 
 
 async def send_group_page(
@@ -153,8 +170,9 @@ async def send_group_page(
     page: int = 1,
     edit_message_id: int | None = None,
     notice: str | None = None,
+    alpha: bool = False,
 ) -> None:
-    result = await pages_for(user_id, token)
+    result = await pages_for(user_id, token, alpha)
     if result is None:
         return
     _, pages = result
@@ -162,7 +180,7 @@ async def send_group_page(
     text = pages[page - 1]
     if notice:
         text = f"{notice}\n\n{text}"
-    markup = group_pages_keyboard(token, page, len(pages))
+    markup = group_pages_keyboard(token, page, len(pages), alpha)
 
     if edit_message_id:
         await safe_delete_message(message.bot, message.chat.id, edit_message_id)
@@ -176,10 +194,26 @@ async def list_group_open(callback: CallbackQuery, user_id: int) -> None:
     await show_group_page(callback, user_id, token, 1)
 
 
+@router.callback_query(F.data.startswith("lgnew:"))
+async def list_group_open_new(callback: CallbackQuery, user_id: int) -> None:
+    """Как lg:, но открывает список ОТДЕЛЬНЫМ новым сообщением, не трогая
+    то, с которого нажали кнопку — используется на сообщении об успешном
+    добавлении растения, чтобы оно не пропадало/не подменялось списком."""
+    token = callback.data.split(":", 1)[1]
+    await callback.answer()
+    await send_group_page(callback.message, user_id, token, 1)
+
+
 @router.callback_query(F.data.startswith("lgpage:"))
 async def list_group_page(callback: CallbackQuery, user_id: int) -> None:
-    _, token, page = callback.data.split(":", 2)
-    await show_group_page(callback, user_id, token, int(page))
+    _, token, page, alpha = callback.data.split(":", 3)
+    await show_group_page(callback, user_id, token, int(page), alpha == "1")
+
+
+@router.callback_query(F.data.startswith("lgsort:"))
+async def list_group_sort(callback: CallbackQuery, user_id: int) -> None:
+    _, token, page, alpha = callback.data.split(":", 3)
+    await show_group_page(callback, user_id, token, int(page), alpha == "1")
 
 
 @router.callback_query(F.data == "list_noop")

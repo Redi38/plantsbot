@@ -14,6 +14,7 @@ class Config:
     ai_api_key: str | None
     ai_api_base_url: str
     ai_model: str
+    ai_max_tokens: int
 
 
 def load_config() -> Config:
@@ -24,6 +25,7 @@ def load_config() -> Config:
         ai_api_key=os.getenv("AI_API_KEY"),
         ai_api_base_url=os.getenv("AI_API_BASE_URL", "https://api.openai.com/v1"),
         ai_model=os.getenv("AI_MODEL", "gpt-4o-mini"),
+        ai_max_tokens=int(os.getenv("AI_MAX_TOKENS", "512")),
     )
     if cfg.ai_enabled and not cfg.ai_api_key:
         raise ValueError(

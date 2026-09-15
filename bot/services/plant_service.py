@@ -62,6 +62,15 @@ async def get_ungrouped_label(session: AsyncSession, user_id: int) -> str:
     return (user.ungrouped_label if user and user.ungrouped_label else None) or _DEFAULT_UNGROUPED_LABEL
 
 
+def _sort_plants(plants: list[Plant], alpha: bool) -> list[Plant]:
+    """alpha=True — по алфавиту (без учёта регистра); alpha=False —
+    порядок добавления (по id), независимо от того, в каком порядке их
+    вернула БД/relationship."""
+    if alpha:
+        return sorted(plants, key=lambda p: p.name.lower())
+    return sorted(plants, key=lambda p: p.id)
+
+
 def _render_group_block(name: str, plants: list[Plant]) -> str:
     lines = [f"<b>{name} ({len(plants)})</b>"]
     if not plants:
@@ -73,11 +82,12 @@ def _render_group_block(name: str, plants: list[Plant]) -> str:
 
 
 async def render_group_pages(
-    session: AsyncSession, user_id: int, group_id: int | None
+    session: AsyncSession, user_id: int, group_id: int | None, alpha: bool = False
 ) -> tuple[str, list[str]] | None:
     """Страницы для ОДНОЙ конкретной группы (group_id=None -> растения без
     группы). Возвращает (название, страницы) или None, если группа не
-    найдена / принадлежит другому пользователю."""
+    найдена / принадлежит другому пользователю. alpha=True — растения
+    сортируются по алфавиту, иначе — в порядке добавления."""
     if group_id is None:
         _, ungrouped = await crud.get_full_tree(session, user_id)
         name, plants = await get_ungrouped_label(session, user_id), ungrouped
@@ -87,23 +97,26 @@ async def render_group_pages(
             return None
         name, plants = group.name, group.plants
 
-    block_text = _render_group_block(name, plants)
+    block_text = _render_group_block(name, _sort_plants(plants, alpha))
     return name, split_long_text(block_text)
 
 
-async def render_pages(session: AsyncSession, user_id: int) -> list[str]:
+async def render_pages(session: AsyncSession, user_id: int, alpha: bool = False) -> list[str]:
     """Строит список страниц для /list — каждая группа отдельной страницей
     (без псевдографики: растения — простым маркером). Если текст одной
     группы всё равно не помещается в лимит Telegram, она дробится на
-    несколько страниц через split_long_text."""
+    несколько страниц через split_long_text. alpha=True — растения внутри
+    каждой группы сортируются по алфавиту, иначе — в порядке добавления."""
     groups, ungrouped = await crud.get_full_tree(session, user_id)
 
     if not groups and not ungrouped:
         return ["Пока нет ни одного растения. Добавь первое кнопкой ➕ Добавить 🌱"]
 
-    blocks: list[tuple[str, list[Plant]]] = [(group.name, group.plants) for group in groups]
+    blocks: list[tuple[str, list[Plant]]] = [
+        (group.name, _sort_plants(group.plants, alpha)) for group in groups
+    ]
     if ungrouped:
-        blocks.append((await get_ungrouped_label(session, user_id), ungrouped))
+        blocks.append((await get_ungrouped_label(session, user_id), _sort_plants(ungrouped, alpha)))
 
     total = sum(len(plants) for _, plants in blocks)
     list_header = f"🌿 <b>Все растения ({total})</b>"

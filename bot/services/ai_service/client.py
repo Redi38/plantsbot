@@ -82,7 +82,7 @@ def extract_json(content: str) -> dict:
 
 
 async def call_api(
-    user_text: str, use_json_mode: bool, system_prompt: str, *, _retry_on_rate_limit: bool = True
+    user_text: str, use_json_mode: bool, system_prompt: str, *, _retries_left: int = 2
 ) -> str:
     headers = {
         "Authorization": f"Bearer {config.ai_api_key}",
@@ -95,6 +95,7 @@ async def call_api(
             {"role": "user", "content": user_text},
         ],
         "temperature": 0,
+        "max_tokens": config.ai_max_tokens,
     }
     if use_json_mode:
         payload["response_format"] = {"type": "json_object"}
@@ -109,11 +110,11 @@ async def call_api(
         ) as resp:
             text = await resp.text()
             if resp.status == 429:
-                if _retry_on_rate_limit:
+                if _retries_left > 0:
                     wait_seconds = min(_parse_retry_after(text), 25.0) + 0.5
                     await asyncio.sleep(wait_seconds)
                     return await call_api(
-                        user_text, use_json_mode, system_prompt, _retry_on_rate_limit=False
+                        user_text, use_json_mode, system_prompt, _retries_left=_retries_left - 1
                     )
                 raise AIServiceRateLimited(f"AI API rate limit не прошёл даже после ожидания: {text}")
             if resp.status != 200:

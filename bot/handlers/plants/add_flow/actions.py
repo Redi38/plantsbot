@@ -42,7 +42,7 @@ async def finalize_add(message: Message, state: FSMContext, user_id: int, commen
         group_token = return_token if return_token else ("none" if data.get("group_id") is None else str(data["group_id"]))
         text = f"🌱 Добавила «{plant.name}»"
         builder = InlineKeyboardBuilder()
-        builder.button(text="📋 Список", callback_data=f"lg:{group_token}", style="primary")
+        builder.button(text="📋 Список", callback_data=f"lgnew:{group_token}", style="primary")
         if tracked_id:
             await safe_delete_message(message.bot, message.chat.id, tracked_id)
         await message.answer(text, reply_markup=builder.as_markup())

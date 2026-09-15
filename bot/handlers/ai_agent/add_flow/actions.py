@@ -13,7 +13,7 @@ def success_message(
     group_part = f" в группу «{group_name}»" if group_name else ""
     group_token = "none" if group_id is None else str(group_id)
     builder = InlineKeyboardBuilder()
-    builder.button(text="📋 Список", callback_data=f"lg:{group_token}", style="primary")
+    builder.button(text="📋 Список", callback_data=f"lgnew:{group_token}", style="primary")
     return f"🌱 Добавила «{plant_name}»{group_part}", builder
 
 

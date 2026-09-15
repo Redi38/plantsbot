@@ -87,6 +87,38 @@ async def test_render_pages_includes_group_and_ungrouped(session, user_id):
     assert "Хавортия" in full_text
 
 
+async def test_render_pages_default_order_is_by_addition(session, user_id):
+    await plant_service.add_plant(session, user_id, name="Хавортия", group_name="Суккуленты")
+    await plant_service.add_plant(session, user_id, name="Алоэ", group_name="Суккуленты")
+
+    pages = await plant_service.render_pages(session, user_id)
+    full_text = "\n".join(pages)
+    assert full_text.index("Хавортия") < full_text.index("Алоэ")
+
+
+async def test_render_pages_alpha_sorts_within_each_group(session, user_id):
+    await plant_service.add_plant(session, user_id, name="Хавортия", group_name="Суккуленты")
+    await plant_service.add_plant(session, user_id, name="Алоэ", group_name="Суккуленты")
+    await plant_service.add_plant(session, user_id, name="Юкка")
+    await plant_service.add_plant(session, user_id, name="Бегония")
+
+    pages = await plant_service.render_pages(session, user_id, alpha=True)
+    full_text = "\n".join(pages)
+    assert full_text.index("Алоэ") < full_text.index("Хавортия")
+    assert full_text.index("Бегония") < full_text.index("Юкка")
+
+
+async def test_render_group_pages_alpha_sorts_group(session, user_id):
+    group, _ = await crud.get_or_create_group(session, user_id, "Суккуленты")
+    await session.commit()
+    await plant_service.add_plant(session, user_id, name="Хавортия", group_id=group.id)
+    await plant_service.add_plant(session, user_id, name="Алоэ", group_id=group.id)
+
+    _, pages = await plant_service.render_group_pages(session, user_id, group.id, alpha=True)
+    full_text = "\n".join(pages)
+    assert full_text.index("Алоэ") < full_text.index("Хавортия")
+
+
 async def test_find_plants_by_term(session, user_id):
     await plant_service.add_plant(session, user_id, name="Алоказия Полли")
     await plant_service.add_plant(session, user_id, name="Алоказия Одора")
