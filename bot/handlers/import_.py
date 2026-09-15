@@ -33,6 +33,8 @@ async def cmd_import(message: Message, state: FSMContext) -> None:
 
     export_builder = InlineKeyboardBuilder()
     export_builder.button(text="📤 Экспорт", callback_data="export_plants", style="primary")
+    export_builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
+    export_builder.adjust(1)
 
     await message.answer(
         "📥 Пришли список растений одним из способов:\n\n"

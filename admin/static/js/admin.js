@@ -117,3 +117,39 @@ document.addEventListener("submit", (event) => {
     }, 0);
   }
 });
+
+// ---------- Обновление списка логов ИИ без перезагрузки страницы (/ai-logs) ----------
+
+(function initAiLogRefresh() {
+  const btn = document.getElementById("ai-log-refresh-btn");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    if (btn.classList.contains("is-loading")) return;
+    const results = document.getElementById("ai-log-results");
+    if (!results) return;
+
+    btn.classList.add("is-loading");
+    btn.disabled = true;
+    try {
+      const response = await fetch(window.location.href, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      if (!response.ok) throw new Error(`Неожиданный статус ответа: ${response.status}`);
+
+      const html = await response.text();
+      const freshResults = new DOMParser().parseFromString(html, "text/html").getElementById("ai-log-results");
+      if (freshResults) {
+        // Переставляем ссылку на актуальный узел — после replaceWith прошлый
+        // #ai-log-results больше не в DOM, поэтому на следующий клик заново
+        // ищем его по id (см. начало обработчика), а не держим в замыкании.
+        document.getElementById("ai-log-results").replaceWith(freshResults);
+      }
+    } catch (err) {
+      console.error("Не удалось обновить логи ИИ:", err);
+    } finally {
+      btn.classList.remove("is-loading");
+      btn.disabled = false;
+    }
+  });
+})();

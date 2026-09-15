@@ -40,6 +40,8 @@ async def handle_create_group_intent(message: Message, user_id: int, intent: dic
 
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 Список", callback_data=f"lg:{group_id}", style="primary")
+    builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
+    builder.adjust(1)
     await message.answer(f"📁 Создала группу «{created_name}»", reply_markup=builder.as_markup())
 
 
@@ -96,4 +98,6 @@ async def handle_rename_group_intent(message: Message, user_id: int, intent: dic
 
     builder = InlineKeyboardBuilder()
     builder.button(text="📋 Список", callback_data=f"lg:{group_id}", style="primary")
+    builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
+    builder.adjust(1)
     await message.answer(f"✏️ «{renamed_from}» → «{final_name}»", reply_markup=builder.as_markup())

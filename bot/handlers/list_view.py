@@ -26,6 +26,19 @@ HELP_TEXT = (
 )
 
 
+@router.callback_query(F.data == "closemsg")
+async def close_message(callback: CallbackQuery, state: FSMContext) -> None:
+    """Просто убирает это сообщение с кнопками, ничего не показывая
+    взамен — для конечных экранов без следующего шага (после "Список" /
+    "Импорт"), чтобы не засорять чат. На случай, если это было сообщение
+    диалога с ожиданием ввода (как экран "Импорт") — заодно сбрасывает
+    FSM-состояние, иначе после удаления подсказки бот молча ждал бы
+    ввод, о котором пользователь уже забыл."""
+    await callback.answer()
+    await state.clear()
+    await callback.message.delete()
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message) -> None:
     await message.answer(HELP_TEXT, reply_markup=main_menu_keyboard())
@@ -33,9 +46,11 @@ async def cmd_start(message: Message) -> None:
 
 # ---------- Меню групп (динамическое, по числу групп пользователя) ----------
 
-def _group_menu_keyboard(groups: list[Group], ungrouped_label: str | None):
+def _group_menu_keyboard(groups: list[Group], ungrouped_label: str | None, *, with_close: bool = False):
     """Строится заново под конкретного пользователя: одна кнопка на группу
-    (id зашит в callback_data, поэтому переименование/дубли названий не мешают)."""
+    (id зашит в callback_data, поэтому переименование/дубли названий не мешают).
+    with_close — добавить кнопку "Назад", которая просто убирает это
+    сообщение (для точки входа /Список, где дальше идти уже некуда)."""
     builder = InlineKeyboardBuilder()
     total = 0
     for group in groups:
@@ -47,17 +62,26 @@ def _group_menu_keyboard(groups: list[Group], ungrouped_label: str | None):
         total += count
         builder.button(text=f"{ungrouped_label[0]} ({count})", callback_data="lg:none")
     builder.button(text=f"📋 Показать все ({total})", callback_data="lg:all", style="primary")
+    if with_close:
+        builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
     builder.adjust(1)
     return builder.as_markup()
 
 
-async def group_menu_text_and_kb(user_id: int):
+async def group_menu_text_and_kb(user_id: int, *, with_close: bool = False):
     async with get_session() as session:
         groups, ungrouped = await crud.get_full_tree(session, user_id)
         if not groups and not ungrouped:
-            return "Пока нет ни одного растения. Добавь первое кнопкой ➕ Добавить", None
+            kb = _close_keyboard() if with_close else None
+            return "Пока нет ни одного растения. Добавь первое кнопкой ➕ Добавить", kb
         ungrouped_label = (await plant_service.get_ungrouped_label(session, user_id), ungrouped) if ungrouped else None
-    return "🌿 Выбери группу:", _group_menu_keyboard(groups, ungrouped_label)
+    return "🌿 Выбери группу:", _group_menu_keyboard(groups, ungrouped_label, with_close=with_close)
+
+
+def _close_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
+    return builder.as_markup()
 
 
 @router.message(F.text == BTN_LIST)
@@ -66,13 +90,13 @@ async def cmd_list(message: Message, state: FSMContext, user_id: int) -> None:
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
         await safe_delete_message(message.bot, message.chat.id, old_msg_id)
-    text, kb = await group_menu_text_and_kb(user_id)
+    text, kb = await group_menu_text_and_kb(user_id, with_close=True)
     await message.answer(text, reply_markup=kb)
 
 
 @router.callback_query(F.data == "lgmenu")
 async def list_menu_back(callback: CallbackQuery, user_id: int) -> None:
-    text, kb = await group_menu_text_and_kb(user_id)
+    text, kb = await group_menu_text_and_kb(user_id, with_close=True)
     await callback.answer()
     await safe_edit_text(callback.message, text, reply_markup=kb)
 

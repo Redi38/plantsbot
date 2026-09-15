@@ -127,7 +127,7 @@ async def lggdel_with_apply(callback: CallbackQuery, user_id: int) -> None:
         await group_service.remove_with_plants(session, group)
 
     await callback.answer("Удалено")
-    text, kb = await group_menu_text_and_kb(user_id)
+    text, kb = await group_menu_text_and_kb(user_id, with_close=True)
     await safe_edit_text(callback.message, f"✅ Группа «{name}» удалена вместе с растениями.\n\n{text}", reply_markup=kb)
 
 
@@ -211,7 +211,7 @@ async def _finalize_delete_move(
         else:
             await group_service.remove_move_plants(session, group, target_group_id)
 
-    text, kb = await group_menu_text_and_kb(user_id)
+    text, kb = await group_menu_text_and_kb(user_id, with_close=True)
     notice = f"✅ Группа «{name}» удалена, растения перенесены.\n\n{text}"
     if edit:
         await safe_edit_text(message, notice, reply_markup=kb)

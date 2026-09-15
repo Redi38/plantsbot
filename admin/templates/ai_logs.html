@@ -2,7 +2,6 @@
 {% block content %}
   <a class="back" href="/">← Все пользователи</a>
   <h1>Логи ИИ-агента</h1>
-  <p class="muted">Всего обращений: {{ total }}. Последние формулировки пользователей и то, что распознал агент — полезно для доработки системного промпта.</p>
 
   <div class="card" id="ai-log-filter-card">
     <form class="ai-log-filter" method="get" action="/ai-logs">
@@ -15,59 +14,69 @@
           <option value="{{ a }}" {% if action_filter == a %}selected{% endif %}>{{ a }}</option>
         {% endfor %}
       </select>
+      <button type="button" id="ai-log-refresh-btn" class="icon-btn" title="Обновить список — подтягивает новые логи без сброса фильтра и страницы">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+          <path d="M20 12a8 8 0 1 1-2.34-5.66" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M20 4v6h-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       <noscript><input type="submit" class="primary" value="Применить"></noscript>
     </form>
   </div>
 
-  {% if not entries %}
-    <p class="empty">{% if action_filter %}Ничего не найдено по этому фильтру.{% else %}Пока обращений не было.{% endif %}</p>
-  {% else %}
-    <ul class="ai-logs">
-      {% for log, user in entries %}
-        <li class="ai-log">
-          <div class="ai-log-top">
-            {% if user %}
-              <a href="/users/{{ user.id }}">{{ user.display_name }}</a>
-            {% else %}
-              <span class="muted">Пользователь #{{ log.user_id }} (удалён)</span>
-            {% endif %}
-            <span class="muted">{{ log.created_at.strftime("%d.%m.%Y %H:%M") }}</span>
-          </div>
-          <p class="ai-log-text">«{{ log.user_text }}»</p>
-          {% if log.error %}
-            <span class="ai-log-badge ai-log-badge--error">ошибка</span>
-            <p class="ai-log-error">{{ log.error }}</p>
-          {% else %}
-            <span class="ai-log-badge {% if log.action == 'unknown' or not log.action %}ai-log-badge--unknown{% endif %}">
-              {{ log.action or "unknown" }}
-            </span>
-            {% if log.plant_name or log.group_name or log.comment %}
-              <div class="ai-log-meta">
-                {% if log.plant_name %}<span>🌱 {{ log.plant_name }}</span>{% endif %}
-                {% if log.group_name %}<span>📁 {{ log.group_name }}</span>{% endif %}
-                {% if log.comment %}<span>💬 {{ log.comment }}</span>{% endif %}
-              </div>
-            {% endif %}
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ul>
+  <div id="ai-log-results">
+    <p class="muted">Всего обращений: {{ total }}. Последние формулировки пользователей и то, что распознал агент — полезно для доработки системного промпта.</p>
 
-    {% if total_pages > 1 %}
-      {% macro page_url(p) %}/ai-logs?page={{ p }}{% if action_filter %}&action={{ action_filter }}{% endif %}{% endmacro %}
-      <nav class="pagination">
-        {% if page > 1 %}
-          <a href="{{ page_url(page - 1) }}" class="pagination-link">← Раньше</a>
-        {% else %}
-          <span class="pagination-link pagination-link--disabled">← Раньше</span>
-        {% endif %}
-        <span class="muted pagination-status">Страница {{ page }} из {{ total_pages }}</span>
-        {% if page < total_pages %}
-          <a href="{{ page_url(page + 1) }}" class="pagination-link">Позже →</a>
-        {% else %}
-          <span class="pagination-link pagination-link--disabled">Позже →</span>
-        {% endif %}
-      </nav>
+    {% if not entries %}
+      <p class="empty">{% if action_filter %}Ничего не найдено по этому фильтру.{% else %}Пока обращений не было.{% endif %}</p>
+    {% else %}
+      <ul class="ai-logs">
+        {% for log, user in entries %}
+          <li class="ai-log">
+            <div class="ai-log-top">
+              {% if user %}
+                <a href="/users/{{ user.id }}">{{ user.display_name }}</a>
+              {% else %}
+                <span class="muted">Пользователь #{{ log.user_id }} (удалён)</span>
+              {% endif %}
+              <span class="muted">{{ log.created_at.strftime("%d.%m.%Y %H:%M") }}</span>
+            </div>
+            <p class="ai-log-text">«{{ log.user_text }}»</p>
+            {% if log.error %}
+              <span class="ai-log-badge ai-log-badge--error">ошибка</span>
+              <p class="ai-log-error">{{ log.error }}</p>
+            {% else %}
+              <span class="ai-log-badge {% if log.action == 'unknown' or not log.action %}ai-log-badge--unknown{% endif %}">
+                {{ log.action or "unknown" }}
+              </span>
+              {% if log.plant_name or log.group_name or log.comment %}
+                <div class="ai-log-meta">
+                  {% if log.plant_name %}<span>🌱 {{ log.plant_name }}</span>{% endif %}
+                  {% if log.group_name %}<span>📁 {{ log.group_name }}</span>{% endif %}
+                  {% if log.comment %}<span>💬 {{ log.comment }}</span>{% endif %}
+                </div>
+              {% endif %}
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+
+      {% if total_pages > 1 %}
+        {% macro page_url(p) %}/ai-logs?page={{ p }}{% if action_filter %}&action={{ action_filter }}{% endif %}{% endmacro %}
+        <nav class="pagination">
+          {% if page > 1 %}
+            <a href="{{ page_url(page - 1) }}" class="pagination-link">← Раньше</a>
+          {% else %}
+            <span class="pagination-link pagination-link--disabled">← Раньше</span>
+          {% endif %}
+          <span class="muted pagination-status">Страница {{ page }} из {{ total_pages }}</span>
+          {% if page < total_pages %}
+            <a href="{{ page_url(page + 1) }}" class="pagination-link">Позже →</a>
+          {% else %}
+            <span class="pagination-link pagination-link--disabled">Позже →</span>
+          {% endif %}
+        </nav>
+      {% endif %}
     {% endif %}
-  {% endif %}
+  </div>
 {% endblock %}

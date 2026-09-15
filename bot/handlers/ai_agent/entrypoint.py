@@ -112,7 +112,7 @@ async def _dispatch_list(ctx: _Ctx) -> bool:
 
     filter_term = (ctx.intent.get("group_name") or "").strip()
     if not filter_term:
-        text, kb = await group_menu_text_and_kb(ctx.user_id)
+        text, kb = await group_menu_text_and_kb(ctx.user_id, with_close=True)
         await ctx.message.answer(text, reply_markup=kb)
         return True
 

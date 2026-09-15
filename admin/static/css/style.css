@@ -310,6 +310,27 @@ details > summary::-webkit-details-marker { display: none; }
 /* ---------- Фильтр и пагинация логов ИИ ---------- */
 #ai-log-filter-card { padding: 10px 14px; }
 .ai-log-filter { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--green-light); }
+.icon-btn:disabled { opacity: 0.6; cursor: default; }
+.icon-btn.is-loading svg { animation: icon-btn-spin 0.7s linear infinite; }
+@keyframes icon-btn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 .pagination {
   display: flex;
   align-items: center;
