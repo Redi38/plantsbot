@@ -65,10 +65,29 @@ async def rename_apply(message: Message, state: FSMContext, user_id: int) -> Non
 # ---------- Удаление группы ----------
 
 @router.callback_query(F.data.startswith("lggdel:"))
-async def lggdel_menu(callback: CallbackQuery) -> None:
-    """Спрашивает, как поступить с растениями внутри удаляемой группы."""
+async def lggdel_menu(callback: CallbackQuery, user_id: int) -> None:
+    """Спрашивает, как поступить с растениями внутри удаляемой группы —
+    если группа уже пустая (растений в ней нет), спрашивать нечего:
+    "перенести" и "удалить вместе с растениями" в этом случае ничем не
+    отличаются, сразу просим подтвердить удаление самой группы."""
     gid = callback.data.split(":", 1)[1]
     await callback.answer()
+
+    async with get_session() as session:
+        group = await crud.get_group(session, int(gid), user_id)
+        has_plants = bool(group and group.plants)
+
+    if not has_plants:
+        kb = confirm_delete_keyboard(
+            f"lggdelwithc:{gid}",
+            f"lg:{gid}",
+            confirm_label="🗑 Да, удалить",
+            cancel_label="⬅️ Назад",
+            cancel_style="primary",
+        )
+        await callback.message.edit_text("🗑 Группа пустая — удалить её?", reply_markup=kb)
+        return
+
     builder = InlineKeyboardBuilder()
     builder.button(text="📦 Удалить, растения переместить", callback_data=f"lggdelmove:{gid}", style="primary")
     builder.button(text="🗑 Удалить вместе с растениями", callback_data=f"lggdelwith:{gid}", style="danger")

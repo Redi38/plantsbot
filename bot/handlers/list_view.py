@@ -10,7 +10,7 @@ from bot.db.models import Group
 from bot.keyboards.inline import add_pagination_buttons
 from bot.keyboards.reply import BTN_LIST, main_menu_keyboard
 from bot.services import plant_service
-from bot.utils.chat import begin_dialog, safe_delete_message, safe_edit_text
+from bot.utils.chat import begin_dialog, delete_user_message, safe_delete_message, safe_edit_text
 
 router = Router(name="list_view")
 
@@ -62,6 +62,7 @@ async def group_menu_text_and_kb(user_id: int):
 
 @router.message(F.text == BTN_LIST)
 async def cmd_list(message: Message, state: FSMContext, user_id: int) -> None:
+    await delete_user_message(message)
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
         await safe_delete_message(message.bot, message.chat.id, old_msg_id)

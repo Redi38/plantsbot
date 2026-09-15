@@ -9,7 +9,7 @@ from bot.db import crud
 from bot.db.database import get_session
 from bot.handlers.list_view import show_group_page
 from bot.keyboards.reply import BTN_ADD, MENU_BUTTONS
-from bot.utils.chat import begin_dialog, render, safe_delete_message, track_callback
+from bot.utils.chat import begin_dialog, delete_user_message, render, safe_delete_message, track_callback
 
 from .. import router
 from ..common import cancel_keyboard
@@ -19,6 +19,7 @@ from .ui import AddPlant, ask_comment, show_group_choice, warn_duplicate
 
 @router.message(F.text == BTN_ADD)
 async def cmd_add(message: Message, state: FSMContext) -> None:
+    await delete_user_message(message)
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
         await safe_delete_message(message.bot, message.chat.id, old_msg_id)
@@ -74,6 +75,7 @@ async def add_force(callback: CallbackQuery, state: FSMContext, user_id: int) ->
 @router.message(StateFilter(AddPlant.name), ~F.text.in_(MENU_BUTTONS))
 async def add_name(message: Message, state: FSMContext, user_id: int) -> None:
     name = message.text.strip()
+    await delete_user_message(message)
     await state.update_data(name=name)
     data = await state.get_data()
 
@@ -115,8 +117,11 @@ async def add_choose_group(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(StateFilter(AddPlant.new_group_name), ~F.text.in_(MENU_BUTTONS))
 async def add_new_group_name(message: Message, state: FSMContext, user_id: int) -> None:
+    group_name = message.text.strip()
+    await delete_user_message(message)
+
     async with get_session() as session:
-        group, _ = await crud.get_or_create_group(session, user_id, message.text.strip())
+        group, _ = await crud.get_or_create_group(session, user_id, group_name)
         await session.commit()
         group_id = group.id
 
@@ -126,9 +131,12 @@ async def add_new_group_name(message: Message, state: FSMContext, user_id: int) 
 
 @router.message(Command("skip"), StateFilter(AddPlant.comment))
 async def add_skip_comment(message: Message, state: FSMContext, user_id: int) -> None:
+    await delete_user_message(message)
     await finalize_add(message, state, user_id, comment=None)
 
 
 @router.message(StateFilter(AddPlant.comment), ~F.text.in_(MENU_BUTTONS))
 async def add_comment(message: Message, state: FSMContext, user_id: int) -> None:
-    await finalize_add(message, state, user_id, comment=message.text.strip())
+    comment = message.text.strip()
+    await delete_user_message(message)
+    await finalize_add(message, state, user_id, comment=comment)

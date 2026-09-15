@@ -10,6 +10,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db import crud
 from bot.db.database import get_session
 from bot.db.models import Group
+from bot.utils.chat import delete_user_message
 
 from .. import router
 from ..keyboards import duplicate_keyboard
@@ -127,8 +128,11 @@ async def ai_pick_group(callback: CallbackQuery, state: FSMContext, user_id: int
 
 @router.message(StateFilter(AIAdd.new_group_name), F.text)
 async def ai_new_group_name(message: Message, state: FSMContext, user_id: int) -> None:
+    group_name = message.text.strip()
+    await delete_user_message(message)
+
     async with get_session() as session:
-        group, _ = await crud.get_or_create_group(session, user_id, message.text.strip())
+        group, _ = await crud.get_or_create_group(session, user_id, group_name)
         await session.commit()
         group_id = group.id
 

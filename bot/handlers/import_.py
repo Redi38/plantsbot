@@ -11,7 +11,7 @@ from bot.db.database import get_session
 from bot.keyboards.inline import confirm_keyboard
 from bot.keyboards.reply import BTN_IMPORT, MENU_BUTTONS
 from bot.services import import_service
-from bot.utils.chat import begin_dialog, safe_delete_message
+from bot.utils.chat import begin_dialog, delete_user_message, safe_delete_message
 from bot.utils.text import split_long_text
 
 router = Router(name="import_")
@@ -25,6 +25,7 @@ class ImportFlow(StatesGroup):
 
 @router.message(F.text == BTN_IMPORT)
 async def cmd_import(message: Message, state: FSMContext) -> None:
+    await delete_user_message(message)
     old_msg_id = await begin_dialog(state)
     if old_msg_id:
         await safe_delete_message(message.bot, message.chat.id, old_msg_id)

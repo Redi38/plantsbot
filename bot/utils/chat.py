@@ -33,6 +33,19 @@ async def safe_edit_text(message: Message, text: str, reply_markup=None) -> None
         await message.edit_text(text, reply_markup=reply_markup)
 
 
+async def delete_user_message(message: Message) -> None:
+    """Удаляет сообщение САМОГО пользователя — ответ на шаге многошагового
+    диалога (название растения, название группы, комментарий). Бот и так
+    подчищает за собой через render(), но без этого в чате оставалась
+    "лесенка" из обрывочных реплик пользователя вида «Алоэ», «Суккуленты»,
+    которые вне контекста уже удалённых вопросов бота ничего не значат.
+
+    Молча игнорирует ошибку: в группах у бота может не быть права
+    delete_messages, а сообщения старше 48 часов Telegram удалять не даёт —
+    в обоих случаях это не повод ронять шаг диалога."""
+    await safe_delete_message(message.bot, message.chat.id, message.message_id)
+
+
 async def begin_dialog(state: FSMContext) -> int | None:
     """Начинает новый диалог с нуля: возвращает id ранее отслеживаемого
     рабочего сообщения бота (если сценарий уже был начат — из другой
