@@ -7,10 +7,10 @@ from fastapi.responses import StreamingResponse
 
 from admin.auth import require_auth
 from admin.database import get_session
-from admin.helpers import get_user_or_404, plant_count, redirect_with, user_redirect
+from admin.helpers import get_user_or_404, plant_count, redirect_with, user_redirect, zone_view
 from admin.templating import templates
 from bot.db import crud
-from bot.services import import_service, plant_service
+from bot.services import import_service, plant_service, watering_service
 
 router = APIRouter()
 
@@ -43,6 +43,8 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
         groups, ungrouped = await crud.get_full_tree(session, user.id)
         ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
         ai_logs = await crud.list_ai_logs_for_user(session, user.id, limit=30)
+        zones = await crud.list_zones(session, user.id)
+    now = watering_service.utcnow()
     msg = request.query_params.get("msg")
     err = request.query_params.get("err")
     count = plant_count(groups, ungrouped)
@@ -56,6 +58,10 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
             "ungrouped_label": ungrouped_label,
             "plant_count": count,
             "ai_logs": ai_logs,
+            "zones": [zone_view(zone, now) for zone in zones],
+            "min_interval": watering_service.MIN_INTERVAL_DAYS,
+            "max_interval": watering_service.MAX_INTERVAL_DAYS,
+            "max_name_length": watering_service.MAX_NAME_LENGTH,
             "msg": msg,
             "err": err,
         },

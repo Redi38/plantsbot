@@ -1,0 +1,23 @@
+{% macro state_badge(state) %}
+  {% if state == "sent" %}
+    <span class="zone-badge zone-badge--sent">🔔 напоминание отправлено</span>
+  {% elif state == "queued" %}
+    <span class="zone-badge zone-badge--queued">⏳ ждёт отправки</span>
+  {% else %}
+    <span class="zone-badge">🌱 ждёт срока</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro zone_meta(z) %}
+  {% set zone = z.zone %}
+  <div class="zone-meta">
+    <span>Раз в {{ zone.interval_days }} дн.</span>
+    <span>Следующий полив: {{ zone.next_watering_at.strftime("%d.%m.%Y %H:%M") }} UTC ({{ z.next_text }})</span>
+    <span>Последний полив:
+      {% if zone.last_watered_at %}{{ zone.last_watered_at.strftime("%d.%m.%Y %H:%M") }} UTC ({{ z.last_text }}){% else %}{{ z.last_text }}{% endif %}
+    </span>
+    {% if zone.notified_at %}
+      <span>Последнее напоминание: {{ zone.notified_at.strftime("%d.%m.%Y %H:%M") }} UTC</span>
+    {% endif %}
+  </div>
+{% endmacro %}

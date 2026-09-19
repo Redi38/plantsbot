@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_zone_macros.html" import state_badge, zone_meta %}
+{% block content %}
+  <a class="back" href="/">← Все пользователи</a>
+  <h1>💧 Полив</h1>
+  <p class="muted">
+    Зоны полива всех пользователей: сначала те, кому полив нужен раньше всех.
+    Время в UTC. Чтобы изменить зону, открой пользователя.
+  </p>
+
+  <div class="card" id="watering-filter-card">
+    <form class="ai-log-filter" method="get" action="/watering">
+      <label class="field-label" for="watering-filter-select">Показать:</label>
+      <select id="watering-filter-select" name="status" onchange="this.form.submit()">
+        <option value="" {% if not status_filter %}selected{% endif %}>Все зоны ({{ total }})</option>
+        <option value="{{ filter_due }}" {% if status_filter == filter_due %}selected{% endif %}>Пора поливать ({{ due_count }})</option>
+      </select>
+      <noscript><input type="submit" class="primary" value="Применить"></noscript>
+    </form>
+  </div>
+
+  {% if not items %}
+    <p class="empty">{% if status_filter %}Сейчас поливать ничего не нужно.{% else %}Пока нет ни одной зоны полива.{% endif %}</p>
+  {% else %}
+    <ul class="zones zones--flat">
+      {% for z in items %}
+        {% set zone = z.zone %}
+        <li class="zone">
+          <div class="zone-top">
+            <span class="zone-name">{{ zone.name }}</span>
+            {{ state_badge(z.state) }}
+          </div>
+          <div class="zone-owner">
+            <a href="/users/{{ z.user.id }}#watering">{{ z.user.display_name }}</a>
+          </div>
+          {{ zone_meta(z) }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

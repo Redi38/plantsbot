@@ -104,6 +104,21 @@ async def set_interval(session: AsyncSession, zone: WateringZone, days: int, now
     await session.commit()
 
 
+async def rename(session: AsyncSession, zone: WateringZone, name: str) -> None:
+    """Переименовывает зону. Уникальность имени проверяется так же, как при
+    создании (без учёта регистра и пробелов), но саму зону из проверки
+    исключаем — иначе смена «балкон» на «Балкон» считалась бы дублем.
+    Расписание не трогаем: меняется только название."""
+    name = name.strip()
+    if not name or len(name) > MAX_NAME_LENGTH:
+        raise ValueError(f"name must be 1..{MAX_NAME_LENGTH} chars")
+    existing = await crud.get_zone_by_name(session, zone.user_id, name)
+    if existing is not None and existing.id != zone.id:
+        raise ZoneAlreadyExists(name)
+    zone.name = name
+    await session.commit()
+
+
 async def remove(session: AsyncSession, zone: WateringZone) -> None:
     await crud.delete_zone(session, zone)
     await session.commit()

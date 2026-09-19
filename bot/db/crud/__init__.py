@@ -53,6 +53,7 @@ from .watering import (
     delete_zone,
     get_zone,
     get_zone_by_name,
+    list_all_zones,
     list_due_zones,
     list_zones,
 )
@@ -84,6 +85,7 @@ __all__ = [
     "list_ai_log_actions",
     "list_ai_logs_all",
     "list_ai_logs_for_user",
+    "list_all_zones",
     "list_due_zones",
     "list_groups",
     "list_users",

@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from admin.auth import AuthRequired
 from admin.database import init_db
-from admin.routes import ai_logs, auth, groups, plants, users
+from admin.routes import ai_logs, auth, groups, plants, users, watering
 
 app = FastAPI(title="PlantsBot Dashboard")
 app.mount("/static", StaticFiles(directory="admin/static"), name="static")
@@ -15,6 +15,7 @@ app.include_router(users.router)
 app.include_router(ai_logs.router)
 app.include_router(groups.router)
 app.include_router(plants.router)
+app.include_router(watering.router)
 
 
 @app.on_event("startup")

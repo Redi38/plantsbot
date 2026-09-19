@@ -72,3 +72,15 @@ async def list_due_zones(session: AsyncSession, now: datetime) -> list[tuple[Wat
         .order_by(WateringZone.next_watering_at)
     )
     return [(row[0], row[1]) for row in result.all()]
+
+
+async def list_all_zones(session: AsyncSession) -> list[tuple[WateringZone, User]]:
+    """Все зоны всех пользователей вместе с владельцами — для страницы
+    админки «Полив». Порядок как в list_zones: сначала те, кому полив
+    нужен раньше всех."""
+    result = await session.execute(
+        select(WateringZone, User)
+        .join(User, User.id == WateringZone.user_id)
+        .order_by(WateringZone.next_watering_at, WateringZone.name)
+    )
+    return [(row[0], row[1]) for row in result.all()]

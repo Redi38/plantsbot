@@ -189,7 +189,7 @@ form.add-form {
   border-top: 1px dashed var(--border);
 }
 form.add-form--flush { border-top: none; padding-top: 0; margin-top: 0; }
-input[type=text], select, textarea {
+input[type=text], input[type=number], select, textarea {
   font: inherit;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -386,3 +386,23 @@ body.login-page {
   font-size: 13px;
   margin-top: 14px;
 }
+
+/* ---------- Зоны полива ---------- */
+input[type=number] { width: 84px; }
+.zones { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.zone { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.zone-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.zone-name { font-weight: 600; word-break: break-word; overflow-wrap: anywhere; }
+.zone-owner { font-size: 13px; margin-top: 2px; }
+.zone-meta { font-size: 13px; color: var(--muted); display: flex; gap: 4px 14px; flex-wrap: wrap; margin-top: 6px; }
+.zone-actions { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-top: 10px; }
+.zone-snooze { display: inline-flex; align-items: center; gap: 6px; }
+.zone-edit { flex: 1 1 100%; order: 10; }
+.zone-edit[open] { margin-top: 2px; }
+.zone-badge {
+  display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 8px;
+  border-radius: 10px; background: var(--green-light); color: var(--green);
+}
+.zone-badge--sent { background: var(--ok-bg); color: var(--ok-text); }
+.zone-badge--queued { background: var(--unknown-bg); color: var(--unknown-text); }
+#watering-filter-card { padding: 10px 14px; }

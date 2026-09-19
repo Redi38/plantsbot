@@ -142,6 +142,53 @@ async def test_list_zones_puts_most_urgent_first(session, user_id):
     assert [z.name for z in zones] == ["Часто", "Средне", "Редко"]
 
 
+async def test_rename_changes_only_the_name(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 7, now=NOW)
+
+    await ws.rename(session, zone, "  Лоджия ")
+
+    assert zone.name == "Лоджия"
+    assert zone.interval_days == 7
+    assert zone.next_watering_at == NOW + timedelta(days=7)
+
+
+async def test_rename_allows_changing_only_case_of_own_name(session, user_id):
+    zone = await ws.add_zone(session, user_id, "балкон", 7, now=NOW)
+
+    await ws.rename(session, zone, "Балкон")
+
+    assert zone.name == "Балкон"
+
+
+async def test_rename_rejects_name_of_another_zone(session, user_id):
+    await ws.add_zone(session, user_id, "Балкон", 7, now=NOW)
+    other = await ws.add_zone(session, user_id, "Подоконник", 3, now=NOW)
+
+    with pytest.raises(ws.ZoneAlreadyExists):
+        await ws.rename(session, other, " балкон ")
+
+    assert other.name == "Подоконник"
+
+
+@pytest.mark.parametrize("name", ["", "   ", "х" * 101])
+async def test_rename_rejects_bad_name(session, user_id, name):
+    zone = await ws.add_zone(session, user_id, "Балкон", 7, now=NOW)
+
+    with pytest.raises(ValueError, match="name"):
+        await ws.rename(session, zone, name)
+
+
+async def test_list_all_zones_spans_users_most_urgent_first(session, user_id):
+    other_user = await crud.get_or_create_user(session, telegram_id=987654321, username="other", full_name="Other")
+    await session.commit()
+    await ws.add_zone(session, user_id, "Редко", 30, now=NOW)
+    await ws.add_zone(session, other_user.id, "Часто", 2, now=NOW)
+
+    rows = await crud.list_all_zones(session)
+
+    assert [(zone.name, user.id) for zone, user in rows] == [("Часто", other_user.id), ("Редко", user_id)]
+
+
 # ---------- тексты ----------
 
 

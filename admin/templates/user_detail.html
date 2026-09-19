@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_zone_macros.html" import state_badge, zone_meta %}
 {% block content %}
   <a class="back" href="/">← Все пользователи</a>
   <h1>🌿 {{ user.display_name }}</h1>
@@ -164,6 +165,70 @@
       <input type="text" name="name" placeholder="Название растения" required>
       <input type="text" name="comment" placeholder="Комментарий (необязательно)">
       <input type="submit" class="primary" value="+ Добавить">
+    </form>
+  </div>
+
+  <div class="card" id="watering">
+    <div class="card-header">
+      <h2>💧 Зоны полива</h2>
+      <a href="/watering" class="muted">Все пользователи →</a>
+    </div>
+    <p class="muted hint">
+      Время в UTC. Напоминание приходит в тот момент, когда наступает срок
+      (бот проверяет раз в минуту), — фиксированного часа нет: срок
+      отсчитывается от создания зоны или последнего «Полил».
+    </p>
+
+    {% if zones %}
+      <ul class="zones">
+        {% for z in zones %}
+          {% set zone = z.zone %}
+          <li class="zone">
+            <div class="zone-top">
+              <span class="zone-name">{{ zone.name }}</span>
+              {{ state_badge(z.state) }}
+            </div>
+            {{ zone_meta(z) }}
+            <div class="zone-actions">
+              <form class="inline" method="post" action="/zones/{{ zone.id }}/watered">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <button type="submit" class="primary">Полил</button>
+              </form>
+              <form class="inline zone-snooze" method="post" action="/zones/{{ zone.id }}/snooze">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="number" name="days" value="1" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="На сколько дней отложить">
+                <button type="submit">Отложить (дн.)</button>
+              </form>
+              <details class="zone-edit">
+                <summary>Изменить</summary>
+                <form class="edit-form" method="post" action="/zones/{{ zone.id }}/update">
+                  <input type="hidden" name="user_id" value="{{ user.id }}">
+                  <input type="text" name="name" value="{{ zone.name }}" maxlength="{{ max_name_length }}" required>
+                  <input type="number" name="interval_days" value="{{ zone.interval_days }}" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="Интервал в днях">
+                  <input type="submit" class="primary" value="Сохранить">
+                </form>
+                <p class="muted hint">
+                  Смена интервала сбрасывает отсчёт: следующее напоминание придёт
+                  через новое число дней от момента сохранения.
+                </p>
+              </details>
+              <form class="inline" method="post" action="/zones/{{ zone.id }}/delete"
+                    data-confirm="Удалить зону «{{ zone.name }}»? Напоминания по ней прекратятся.">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <button type="submit" class="danger">Удалить</button>
+              </form>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">Зон полива пока нет.</p>
+    {% endif %}
+
+    <form class="add-form" method="post" action="/users/{{ user.id }}/zones">
+      <input type="text" name="name" placeholder="Название зоны (например, Подоконник)" maxlength="{{ max_name_length }}" required>
+      <input type="number" name="interval_days" value="7" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="Интервал в днях">
+      <input type="submit" class="primary" value="+ Добавить зону">
     </form>
   </div>
 

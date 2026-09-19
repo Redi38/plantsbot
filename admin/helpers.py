@@ -5,7 +5,8 @@ from fastapi.responses import RedirectResponse
 
 from admin.database import get_session
 from bot.db import crud
-from bot.db.models import Group, Plant
+from bot.db.models import Group, Plant, WateringZone
+from bot.services import watering_service
 
 
 def group_anchor(group_id: int | None) -> str:
@@ -66,3 +67,41 @@ async def get_user_or_404(session, user_id: int):
 
 def plant_count(groups: list[Group], ungrouped: list[Plant]) -> int:
     return sum(len(g.plants) for g in groups) + len(ungrouped)
+
+
+def zone_redirect(user_id: int, msg: str | None = None, err: str | None = None) -> RedirectResponse:
+    """Возврат на страницу пользователя к блоку «Зоны полива» с flash-
+    сообщением. redirect_with тут не подходит: он добавляет query после
+    всего URL, а якорь #watering должен стоять после query-строки."""
+    query = {key: value for key, value in (("msg", msg), ("err", err)) if value is not None}
+    url = f"/users/{user_id}"
+    if query:
+        url += f"?{urlencode(query)}"
+    return RedirectResponse(f"{url}#watering", status_code=303)
+
+
+def zone_view(zone: WateringZone, now) -> dict:
+    """Всё, что нужно шаблону про одну зону, посчитанное в одном месте
+    (шаблоны не должны знать про notified_at/next_watering_at).
+
+    state:
+      waiting — срок ещё не наступил;
+      sent    — срок наступил, напоминание по этому циклу уже отправлено;
+      queued  — срок наступил, а напоминания ещё не было (бот выключен или
+                Telegram временно отвечал ошибкой — планировщик повторит
+                на ближайшей минутной проверке).
+    Та же логика, что в crud.list_due_zones, только для отображения."""
+    due = watering_service.is_due(zone, now)
+    reminded = zone.notified_at is not None and zone.notified_at >= zone.next_watering_at
+    if not due:
+        state = "waiting"
+    elif reminded:
+        state = "sent"
+    else:
+        state = "queued"
+    return {
+        "zone": zone,
+        "state": state,
+        "next_text": watering_service.describe_due(zone.next_watering_at, now),
+        "last_text": watering_service.describe_last_watered(zone.last_watered_at, now),
+    }

@@ -110,6 +110,12 @@ groups (with the option to move or delete their plants), edit any plant's
 name, comment, or group, import/export CSV, set a caption for ungrouped
 plants, and read the AI agent's request log across all users at `/ai-logs`.
 
+Watering zones live in their own card on each user's page: add a zone,
+rename it, change the interval, mark it watered, snooze it or delete it. The
+`/watering` page lists every user's zones in one place (most urgent first,
+with a "due now" filter) and shows whether the reminder has already gone
+out. All times in the panel are UTC.
+
 Login is a simple form (`ADMIN_USER` / `ADMIN_PASSWORD` — **change the
 defaults**) backed by a signed, httponly cookie session that lasts 7 days.
 
