@@ -12,6 +12,7 @@
   {% set zone = z.zone %}
   <div class="zone-meta">
     <span>Раз в {{ zone.interval_days }} дн.</span>
+    <span>Напоминание: {{ z.notify_text }}</span>
     <span>Следующий полив: {{ zone.next_watering_at.strftime("%d.%m.%Y %H:%M") }} UTC ({{ z.next_text }})</span>
     <span>Последний полив:
       {% if zone.last_watered_at %}{{ zone.last_watered_at.strftime("%d.%m.%Y %H:%M") }} UTC ({{ z.last_text }}){% else %}{{ z.last_text }}{% endif %}

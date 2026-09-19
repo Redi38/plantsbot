@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, time, timezone
 
 from sqlalchemy import BigInteger, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -100,7 +100,13 @@ class WateringZone(Base):
     пока notified_at >= next_watering_at, повторно не напоминаем (иначе
     планировщик слал бы одно и то же каждую минуту). Отложив полив, мы
     сдвигаем next_watering_at вперёд, и условие снова становится ложным —
-    напоминание придёт ещё раз, когда отложенное время истечёт."""
+    напоминание придёт ещё раз, когда отложенное время истечёт.
+
+    notify_time — час:минута (UTC), в которое должно приходить напоминание.
+    Если не задано (None) — старое поведение: срок считается от точного
+    момента создания зоны/последнего полива, без фиксированного часа. Если
+    задано, next_watering_at всегда выставляется на этот час в нужный день
+    (см. bot/services/watering_service.py:_schedule)."""
 
     __tablename__ = "watering_zones"
     __table_args__ = (UniqueConstraint("user_id", "name", name="uq_zone_user_name"),)
@@ -112,6 +118,7 @@ class WateringZone(Base):
     next_watering_at: Mapped[datetime] = mapped_column(index=True)
     last_watered_at: Mapped[datetime | None] = mapped_column(nullable=True)
     notified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    notify_time: Mapped[time | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship(back_populates="zones")

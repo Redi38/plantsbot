@@ -32,6 +32,11 @@ async def _migrate_add_missing_columns(conn) -> None:
     if "ungrouped_label" not in existing_columns:
         await conn.exec_driver_sql("ALTER TABLE users ADD COLUMN ungrouped_label VARCHAR(100)")
 
+    result = await conn.exec_driver_sql("PRAGMA table_info(watering_zones)")
+    zone_columns = {row[1] for row in result.fetchall()}
+    if "notify_time" not in zone_columns:
+        await conn.exec_driver_sql("ALTER TABLE watering_zones ADD COLUMN notify_time TIME")
+
 
 @asynccontextmanager
 async def get_session():

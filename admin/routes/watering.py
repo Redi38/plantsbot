@@ -1,3 +1,5 @@
+from datetime import time
+
 from fastapi import APIRouter, Depends, Form
 from fastapi.requests import Request
 
@@ -19,6 +21,14 @@ def _interval_error() -> str:
 
 def _interval_ok(days: int) -> bool:
     return ws.MIN_INTERVAL_DAYS <= days <= ws.MAX_INTERVAL_DAYS
+
+
+def _parse_notify_time(raw: str | None) -> time | None:
+    """Значение из <input type="time">: пустая строка — фиксированного часа
+    нет, иначе браузер уже прислал корректный «ЧЧ:ММ»."""
+    if not raw:
+        return None
+    return time.fromisoformat(raw)
 
 
 @router.get("/watering")
@@ -60,6 +70,7 @@ async def create_zone(
     user_id: int,
     name: str = Form(...),
     interval_days: int = Form(...),
+    notify_time: str = Form(""),
     _: str = Depends(require_auth),
 ):
     if not _interval_ok(interval_days):
@@ -67,7 +78,7 @@ async def create_zone(
     async with get_session() as session:
         await get_user_or_404(session, user_id)
         try:
-            zone = await ws.add_zone(session, user_id, name, interval_days)
+            zone = await ws.add_zone(session, user_id, name, interval_days, _parse_notify_time(notify_time))
         except ws.ZoneAlreadyExists:
             return zone_redirect(user_id, err=f"Зона «{name.strip()}» уже есть")
         except ValueError:
@@ -81,14 +92,18 @@ async def update_zone(
     user_id: int = Form(...),
     name: str = Form(...),
     interval_days: int = Form(...),
+    notify_time: str = Form(""),
     _: str = Depends(require_auth),
 ):
-    """Меняет название и/или интервал. Интервал в set_interval сбрасывает
-    отсчёт до следующего полива от текущего момента — это осознанное
-    поведение бота, поэтому вызываем его только если интервал реально
-    поменялся, а не при каждом сохранении формы."""
+    """Меняет название, интервал и/или время напоминания. Интервал в
+    set_interval сбрасывает отсчёт до следующего полива от текущего
+    момента — это осознанное поведение бота, поэтому вызываем его только
+    если интервал реально поменялся, а не при каждом сохранении формы.
+    Время напоминания меняем через set_notify_time отдельно: оно не
+    трогает день следующего полива, только час."""
     if not _interval_ok(interval_days):
         return zone_redirect(user_id, err=_interval_error())
+    new_notify_time = _parse_notify_time(notify_time)
     async with get_session() as session:
         zone = await crud.get_zone(session, zone_id, user_id)
         if zone is None:
@@ -104,6 +119,9 @@ async def update_zone(
             return zone_redirect(user_id, err=f"Название зоны — от 1 до {ws.MAX_NAME_LENGTH} символов")
         if interval_days != zone.interval_days:
             await ws.set_interval(session, zone, interval_days)
+            changed = True
+        if new_notify_time != zone.notify_time:
+            await ws.set_notify_time(session, zone, new_notify_time)
             changed = True
     return zone_redirect(user_id, msg="Сохранено" if changed else "Без изменений")
 

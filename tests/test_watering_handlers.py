@@ -4,7 +4,7 @@
 сервиса не видят: роутинг, FSM-диалог создания, колбэки кнопок."""
 
 from collections.abc import AsyncIterator, Iterator
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 import pytest_asyncio
@@ -164,6 +164,7 @@ async def _create_zone(app: Harness, name: str = "Подоконник", days: i
     await app.press("wzadd")
     await app.say(name)
     await app.say(str(days))
+    await app.press("wztskip")  # без фиксированного часа напоминания
     (zone,) = await _zones()
     return zone.id
 
@@ -184,11 +185,43 @@ async def test_full_add_flow_creates_zone(app):
     assert "Как часто поливать зону «Подоконник»" in app.tg.last_visible_text()
 
     await app.say("7")
+    assert "В какое время" in app.tg.last_visible_text()
+
+    await app.press("wztskip")
     assert "✅ Зона «Подоконник» добавлена" in app.tg.last_visible_text()
     assert "через 7 дн." in app.tg.last_visible_text()
 
     (zone,) = await _zones()
-    assert (zone.name, zone.interval_days) == ("Подоконник", 7)
+    assert (zone.name, zone.interval_days, zone.notify_time) == ("Подоконник", 7, None)
+
+
+async def test_notify_time_can_be_set_at_creation(app):
+    await app.say(BTN_WATER)
+    await app.press("wzadd")
+    await app.say("Подоконник")
+    await app.say("7")
+
+    await app.press("wztime:0900")
+    assert "✅ Зона «Подоконник» добавлена" in app.tg.last_visible_text()
+    assert "в 09:00 UTC" in app.tg.last_visible_text()
+
+    (zone,) = await _zones()
+    assert zone.notify_time == time(9, 0)
+
+
+async def test_notify_time_can_be_typed_at_creation(app):
+    await app.say(BTN_WATER)
+    await app.press("wzadd")
+    await app.say("Подоконник")
+    await app.say("7")
+
+    await app.say("не время")
+    assert "Нужно время в формате" in app.tg.last_visible_text()
+    assert await _zones() == []
+
+    await app.say("21:15")
+    (zone,) = await _zones()
+    assert zone.notify_time == time(21, 15)
 
 
 async def test_interval_can_be_picked_with_preset_button(app):
@@ -197,6 +230,7 @@ async def test_interval_can_be_picked_with_preset_button(app):
     await app.say("Балкон")
 
     await app.press("wzint:14")
+    await app.press("wztskip")
 
     (zone,) = await _zones()
     assert (zone.name, zone.interval_days) == ("Балкон", 14)
@@ -213,6 +247,7 @@ async def test_invalid_interval_is_rejected_and_dialog_continues(app):
     assert await _zones() == []
 
     await app.say("5")
+    await app.press("wztskip")
     (zone,) = await _zones()
     assert zone.interval_days == 5
 
@@ -282,6 +317,27 @@ async def test_change_interval_by_button_and_by_text(app):
     await app.say("10 дней")
     assert "Теперь поливаем раз в 10 дн." in app.tg.last_visible_text()
     assert (await _zones())[0].interval_days == 10
+
+
+async def test_change_notify_time_by_button_and_by_text(app):
+    zone_id = await _create_zone(app, "Подоконник", 7)
+
+    await app.press(f"wztedit:{zone_id}")
+    assert "В какое время" in app.tg.last_visible_text()
+
+    await app.press(f"wzetime:{zone_id}:0900")
+    assert "Теперь напоминаю в 09:00 UTC" in app.tg.last_visible_text()
+    assert (await _zones())[0].notify_time == time(9, 0)
+
+    await app.press(f"wztedit:{zone_id}")
+    await app.say("18:30")
+    assert "Теперь напоминаю в 18:30 UTC" in app.tg.last_visible_text()
+    assert (await _zones())[0].notify_time == time(18, 30)
+
+    await app.press(f"wztedit:{zone_id}")
+    await app.press(f"wztskip:{zone_id}")
+    assert "Фиксированный час напоминания убран" in app.tg.last_visible_text()
+    assert (await _zones())[0].notify_time is None
 
 
 async def test_delete_asks_confirmation_then_removes(app):

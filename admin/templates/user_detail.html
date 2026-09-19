@@ -174,9 +174,10 @@
       <a href="/watering" class="muted">Все пользователи →</a>
     </div>
     <p class="muted hint">
-      Время в UTC. Напоминание приходит в тот момент, когда наступает срок
-      (бот проверяет раз в минуту), — фиксированного часа нет: срок
-      отсчитывается от создания зоны или последнего «Полил».
+      Время в UTC. Бот проверяет сроки раз в минуту. Если у зоны не задано
+      время напоминания — срок отсчитывается от создания зоны или
+      последнего «Полил», без фиксированного часа. Если задано — напоминание
+      придёт именно в этот час в нужный день.
     </p>
 
     {% if zones %}
@@ -205,11 +206,13 @@
                   <input type="hidden" name="user_id" value="{{ user.id }}">
                   <input type="text" name="name" value="{{ zone.name }}" maxlength="{{ max_name_length }}" required>
                   <input type="number" name="interval_days" value="{{ zone.interval_days }}" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="Интервал в днях">
+                  <input type="time" name="notify_time" value="{{ zone.notify_time.strftime('%H:%M') if zone.notify_time else '' }}" aria-label="Время напоминания (UTC), пусто — без фиксированного часа">
                   <input type="submit" class="primary" value="Сохранить">
                 </form>
                 <p class="muted hint">
                   Смена интервала сбрасывает отсчёт: следующее напоминание придёт
-                  через новое число дней от момента сохранения.
+                  через новое число дней от момента сохранения. Время — пусто,
+                  если фиксированного часа нет; смена времени не сдвигает день.
                 </p>
               </details>
               <form class="inline" method="post" action="/zones/{{ zone.id }}/delete"
@@ -228,6 +231,7 @@
     <form class="add-form" method="post" action="/users/{{ user.id }}/zones">
       <input type="text" name="name" placeholder="Название зоны (например, Подоконник)" maxlength="{{ max_name_length }}" required>
       <input type="number" name="interval_days" value="7" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="Интервал в днях">
+      <input type="time" name="notify_time" value="" aria-label="Время напоминания (UTC), необязательно">
       <input type="submit" class="primary" value="+ Добавить зону">
     </form>
   </div>

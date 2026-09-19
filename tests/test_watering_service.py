@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 
@@ -43,6 +43,66 @@ async def test_add_zone_schedules_first_reminder_after_interval(session, user_id
     assert zone.next_watering_at == NOW + timedelta(days=7)
     assert zone.last_watered_at is None
     assert zone.notified_at is None
+    assert zone.notify_time is None
+
+
+# ---------- время напоминания ----------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("9:00", time(9, 0)),
+        ("09:00", time(9, 0)),
+        (" 21:15 ", time(21, 15)),
+        ("21.15", time(21, 15)),
+        ("0:00", time(0, 0)),
+        ("23:59", time(23, 59)),
+    ],
+)
+def test_parse_notify_time_accepts_hh_mm(text, expected):
+    assert ws.parse_notify_time(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "abc", "24:00", "9:60", "9", "9-00"])
+def test_parse_notify_time_rejects_garbage(text):
+    assert ws.parse_notify_time(text) is None
+
+
+async def test_add_zone_with_notify_time_pins_hour_on_target_date(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Подоконник", 7, time(9, 0), now=NOW)
+
+    assert zone.notify_time == time(9, 0)
+    assert zone.next_watering_at == datetime.combine((NOW + timedelta(days=7)).date(), time(9, 0))
+
+
+async def test_mark_watered_respects_existing_notify_time(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 5, time(9, 0), now=NOW)
+
+    watered_at = NOW + timedelta(days=6, hours=3)
+    await ws.mark_watered(session, zone, now=watered_at)
+
+    assert zone.next_watering_at == datetime.combine((watered_at + timedelta(days=5)).date(), time(9, 0))
+
+
+async def test_set_notify_time_changes_hour_without_shifting_day(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 7, now=NOW)
+    original_day = zone.next_watering_at.date()
+
+    await ws.set_notify_time(session, zone, time(18, 30))
+
+    assert zone.notify_time == time(18, 30)
+    assert zone.next_watering_at == datetime.combine(original_day, time(18, 30))
+
+
+async def test_set_notify_time_to_none_keeps_next_watering_at_untouched(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 7, time(9, 0), now=NOW)
+    scheduled = zone.next_watering_at
+
+    await ws.set_notify_time(session, zone, None)
+
+    assert zone.notify_time is None
+    assert zone.next_watering_at == scheduled
 
 
 @pytest.mark.parametrize("days", [0, -1, 366])

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,13 +7,19 @@ from bot.db.models import User, WateringZone
 
 
 async def create_zone(
-    session: AsyncSession, user_id: int, name: str, interval_days: int, next_watering_at: datetime
+    session: AsyncSession,
+    user_id: int,
+    name: str,
+    interval_days: int,
+    next_watering_at: datetime,
+    notify_time: time | None = None,
 ) -> WateringZone:
     zone = WateringZone(
         user_id=user_id,
         name=name.strip(),
         interval_days=interval_days,
         next_watering_at=next_watering_at,
+        notify_time=notify_time,
     )
     session.add(zone)
     await session.flush()

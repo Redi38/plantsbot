@@ -10,6 +10,7 @@
 Роутер регистрируется в диспетчере ДО ai_agent — тот ловит любой
 свободный текст вне FSM."""
 
+from datetime import time
 from html import escape
 
 from aiogram import F, Router
@@ -25,6 +26,7 @@ from bot.keyboards.reply import BTN_WATER, MENU_BUTTONS
 from bot.keyboards.watering import (
     cancel_keyboard,
     interval_keyboard,
+    notify_time_keyboard,
     zone_card_keyboard,
     zones_menu_keyboard,
 )
@@ -48,10 +50,12 @@ _NOT_FOUND = "⚠️ Зона не найдена, возможно уже уд�
 class ZoneAdd(StatesGroup):
     name = State()
     interval = State()
+    notify_time = State()
 
 
 class ZoneEdit(StatesGroup):
     interval = State()
+    notify_time = State()
 
 
 # ---------- Общие представления ----------
@@ -183,14 +187,14 @@ async def zone_add_name(message: Message, state: FSMContext, user_id: int) -> No
 
 
 @router.callback_query(StateFilter(ZoneAdd.interval), F.data.startswith("wzint:"))
-async def zone_add_interval_button(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+async def zone_add_interval_button(callback: CallbackQuery, state: FSMContext) -> None:
     days = int(callback.data.split(":", 1)[1])
     await callback.answer()
-    await _finish_add(callback.message, state, user_id, days, edit=True)
+    await _ask_notify_time(callback.message, state, days, edit=True)
 
 
 @router.message(StateFilter(ZoneAdd.interval), F.text, ~F.text.in_(MENU_BUTTONS))
-async def zone_add_interval_text(message: Message, state: FSMContext, user_id: int) -> None:
+async def zone_add_interval_text(message: Message, state: FSMContext) -> None:
     await delete_user_message(message)
     days = watering_service.parse_interval(message.text)
     if days is None:
@@ -201,22 +205,70 @@ async def zone_add_interval_text(message: Message, state: FSMContext, user_id: i
             reply_markup=interval_keyboard("wzint", "wzcancel"),
         )
         return
-    await _finish_add(message, state, user_id, days, edit=False)
+    await _ask_notify_time(message, state, days, edit=False)
 
 
-async def _finish_add(message: Message, state: FSMContext, user_id: int, days: int, *, edit: bool) -> None:
+async def _ask_notify_time(message: Message, state: FSMContext, days: int, *, edit: bool) -> None:
+    await state.update_data(interval_days=days)
+    await state.set_state(ZoneAdd.notify_time)
+    text = (
+        f"🕒 В какое время (UTC) присылать напоминание про полив раз в {days} дн.?\n\n"
+        "Выбери кнопкой, напиши своё время (например 09:30) или пропусти — тогда "
+        "напоминание будет приходить в момент, когда наступит срок, без фиксированного часа."
+    )
+    kb = notify_time_keyboard("wztime", "wztskip", "wzcancel")
+    if edit:
+        await safe_edit_text(message, text, reply_markup=kb)
+    else:
+        await render(message, state, text, reply_markup=kb)
+
+
+@router.callback_query(StateFilter(ZoneAdd.notify_time), F.data.startswith("wztime:"))
+async def zone_add_notify_time_button(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    hhmm = callback.data.split(":", 1)[1]
+    notify_time = time(int(hhmm[:2]), int(hhmm[2:]))
+    await callback.answer()
+    await _finish_add(callback.message, state, user_id, notify_time, edit=True)
+
+
+@router.callback_query(StateFilter(ZoneAdd.notify_time), F.data == "wztskip")
+async def zone_add_notify_time_skip(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    await callback.answer()
+    await _finish_add(callback.message, state, user_id, None, edit=True)
+
+
+@router.message(StateFilter(ZoneAdd.notify_time), F.text, ~F.text.in_(MENU_BUTTONS))
+async def zone_add_notify_time_text(message: Message, state: FSMContext, user_id: int) -> None:
+    await delete_user_message(message)
+    notify_time = watering_service.parse_notify_time(message.text)
+    if notify_time is None:
+        await render(
+            message,
+            state,
+            "⚠️ Нужно время в формате ЧЧ:ММ, например: 09:30",
+            reply_markup=notify_time_keyboard("wztime", "wztskip", "wzcancel"),
+        )
+        return
+    await _finish_add(message, state, user_id, notify_time, edit=False)
+
+
+async def _finish_add(
+    message: Message, state: FSMContext, user_id: int, notify_time: time | None, *, edit: bool
+) -> None:
     data = await state.get_data()
     name = data["name"]
+    days = data["interval_days"]
     tracked_id = await pop_tracked(state)
     await state.clear()
 
     async with get_session() as session:
         try:
-            zone = await watering_service.add_zone(session, user_id, name, days)
+            zone = await watering_service.add_zone(session, user_id, name, days, notify_time)
         except watering_service.ZoneAlreadyExists:
             notice = f"⚠️ Зона «{escape(name)}» уже есть."
         else:
-            notice = f"✅ Зона «{escape(zone.name)}» добавлена. Напомню полить через {days} дн."
+            when = watering_service.describe_notify_time(notify_time)
+            notice = f"✅ Зона «{escape(zone.name)}» добавлена. Напомню полить через {days} дн. ({when})."
 
     text, kb = await _menu_view(user_id, notice)
     if edit:
@@ -349,6 +401,103 @@ async def zone_edit_interval_text(message: Message, state: FSMContext, user_id: 
         await message.answer(_NOT_FOUND)
         return
     view = await _card_view(user_id, zone_id, notice=f"✅ Теперь поливаем раз в {days} дн.")
+    if view is None:
+        await message.answer(_NOT_FOUND)
+        return
+    text, kb = view
+    await message.answer(text, reply_markup=kb)
+
+
+# ---------- Смена времени напоминания ----------
+
+
+@router.callback_query(F.data.startswith("wztedit:"))
+async def zone_edit_time_start(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    zone_id = int(callback.data.split(":", 1)[1])
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+    if zone is None:
+        await callback.answer("Зона уже удалена", show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    await state.update_data(zone_id=zone_id)
+    await state.set_state(ZoneEdit.notify_time)
+    await callback.message.edit_text(
+        f"🕒 В какое время (UTC) присылать напоминание про зону «{escape(zone.name)}»?\n\n"
+        f"Сейчас — {watering_service.describe_notify_time(zone.notify_time)}.\n"
+        "Выбери кнопкой, напиши своё время (например 09:30) или убери фиксированный час.",
+        reply_markup=notify_time_keyboard(
+            f"wzetime:{zone_id}", f"wztskip:{zone_id}", f"wz:{zone_id}", back_label="⬅️ Назад", back_style="primary"
+        ),
+    )
+    await track_callback(callback, state)
+
+
+async def _apply_notify_time(user_id: int, zone_id: int, notify_time: time | None) -> bool:
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+        if zone is None:
+            return False
+        await watering_service.set_notify_time(session, zone, notify_time)
+    return True
+
+
+@router.callback_query(F.data.startswith("wzetime:"))
+async def zone_edit_notify_time_button(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    _, zone_id, hhmm = callback.data.split(":")
+    notify_time = time(int(hhmm[:2]), int(hhmm[2:]))
+    await callback.answer()
+    await _leave_zone_dialog(state)
+    if not await _apply_notify_time(user_id, int(zone_id), notify_time):
+        await safe_edit_text(callback.message, _NOT_FOUND)
+        return
+    await _edit_to_card(
+        callback.message,
+        user_id,
+        int(zone_id),
+        notice=f"✅ Теперь напоминаю {watering_service.describe_notify_time(notify_time)}.",
+    )
+
+
+@router.callback_query(F.data.startswith("wztskip:"))
+async def zone_edit_notify_time_skip(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    zone_id = int(callback.data.split(":", 1)[1])
+    await callback.answer()
+    await _leave_zone_dialog(state)
+    if not await _apply_notify_time(user_id, zone_id, None):
+        await safe_edit_text(callback.message, _NOT_FOUND)
+        return
+    await _edit_to_card(callback.message, user_id, zone_id, notice="✅ Фиксированный час напоминания убран.")
+
+
+@router.message(StateFilter(ZoneEdit.notify_time), F.text, ~F.text.in_(MENU_BUTTONS))
+async def zone_edit_notify_time_text(message: Message, state: FSMContext, user_id: int) -> None:
+    await delete_user_message(message)
+    data = await state.get_data()
+    zone_id = data["zone_id"]
+
+    notify_time = watering_service.parse_notify_time(message.text)
+    if notify_time is None:
+        await render(
+            message,
+            state,
+            "⚠️ Нужно время в формате ЧЧ:ММ, например: 09:30",
+            reply_markup=notify_time_keyboard(
+                f"wzetime:{zone_id}", f"wztskip:{zone_id}", f"wz:{zone_id}", back_label="⬅️ Назад", back_style="primary"
+            ),
+        )
+        return
+
+    tracked_id = await pop_tracked(state)
+    await state.clear()
+    if tracked_id:
+        await safe_delete_message(message.bot, message.chat.id, tracked_id)
+
+    if not await _apply_notify_time(user_id, zone_id, notify_time):
+        await message.answer(_NOT_FOUND)
+        return
+    view = await _card_view(user_id, zone_id, notice=f"✅ Теперь напоминаю {watering_service.describe_notify_time(notify_time)}.")
     if view is None:
         await message.answer(_NOT_FOUND)
         return

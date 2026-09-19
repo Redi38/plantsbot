@@ -104,4 +104,5 @@ def zone_view(zone: WateringZone, now) -> dict:
         "state": state,
         "next_text": watering_service.describe_due(zone.next_watering_at, now),
         "last_text": watering_service.describe_last_watered(zone.last_watered_at, now),
+        "notify_text": watering_service.describe_notify_time(zone.notify_time),
     }
