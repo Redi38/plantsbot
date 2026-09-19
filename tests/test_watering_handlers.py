@@ -203,7 +203,7 @@ async def test_notify_time_can_be_set_at_creation(app):
 
     await app.press("wztime:0900")
     assert "✅ Зона «Подоконник» добавлена" in app.tg.last_visible_text()
-    assert "в 09:00 UTC" in app.tg.last_visible_text()
+    assert "в <b>12:00</b> (Минск, UTC+3)" in app.tg.last_visible_text()
 
     (zone,) = await _zones()
     assert zone.notify_time == time(9, 0)
@@ -305,6 +305,24 @@ async def test_zone_card_shows_interval_and_water_button_records_watering(app):
     assert zone.last_watered_at is not None
 
 
+async def test_water_button_asks_confirmation_before_recording(app):
+    zone_id = await _create_zone(app, "Подоконник", 7)
+
+    await app.press(f"wz:{zone_id}")
+    await app.press(f"wzwaterask:{zone_id}")
+    assert "Вы полили зону «Подоконник»?" in app.tg.last_visible_text()
+    assert (await _zones())[0].last_watered_at is None
+
+    await app.press(f"wz:{zone_id}")  # «Назад» — полив не отмечен
+    assert "Поливать: раз в 7 дн." in app.tg.last_visible_text()
+    assert (await _zones())[0].last_watered_at is None
+
+    await app.press(f"wzwaterask:{zone_id}")
+    await app.press(f"wzwater:{zone_id}")  # «Да»
+    assert "✅ Полив записан" in app.tg.last_visible_text()
+    assert (await _zones())[0].last_watered_at is not None
+
+
 async def test_change_interval_by_button_and_by_text(app):
     zone_id = await _create_zone(app, "Подоконник", 7)
 
@@ -326,12 +344,12 @@ async def test_change_notify_time_by_button_and_by_text(app):
     assert "В какое время" in app.tg.last_visible_text()
 
     await app.press(f"wzetime:{zone_id}:0900")
-    assert "Теперь напоминаю в 09:00 UTC" in app.tg.last_visible_text()
+    assert "Теперь напоминаю в <b>12:00</b> (Минск, UTC+3)" in app.tg.last_visible_text()
     assert (await _zones())[0].notify_time == time(9, 0)
 
     await app.press(f"wztedit:{zone_id}")
     await app.say("18:30")
-    assert "Теперь напоминаю в 18:30 UTC" in app.tg.last_visible_text()
+    assert "Теперь напоминаю в <b>21:30</b> (Минск, UTC+3)" in app.tg.last_visible_text()
     assert (await _zones())[0].notify_time == time(18, 30)
 
     await app.press(f"wztedit:{zone_id}")

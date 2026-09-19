@@ -202,6 +202,38 @@ input[type=text], input[type=number], select, textarea {
 input[type=text] { flex: 1 1 120px; min-width: 90px; }
 .edit-form input[name="name"] { flex: 2 1 220px; }
 .edit-form input[name="comment"] { flex: 1 1 90px; min-width: 70px; }
+
+/* ---------- Настройка времени напоминания (UTC) ---------- */
+input[type=time] {
+  font: inherit;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 108px;
+  accent-color: var(--green);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input[type=time]:hover { border-color: var(--green); }
+input[type=time]:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px var(--green-light);
+}
+/* Иконка часов в Chrome/Edge/Safari — подстраиваем под тёмную/светлую тему. */
+input[type=time]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px;
+  filter: var(--time-icon-filter, none);
+}
+input[type=time]::-webkit-calendar-picker-indicator:hover { background: var(--green-light); }
+@media (prefers-color-scheme: dark) {
+  input[type=time] { --time-icon-filter: invert(1) brightness(1.4); }
+}
 details > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--green); list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
 .edit-form {

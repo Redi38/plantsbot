@@ -212,9 +212,8 @@ async def _ask_notify_time(message: Message, state: FSMContext, days: int, *, ed
     await state.update_data(interval_days=days)
     await state.set_state(ZoneAdd.notify_time)
     text = (
-        f"🕒 В какое время (UTC) присылать напоминание про полив раз в {days} дн.?\n\n"
-        "Выбери кнопкой, напиши своё время (например 09:30) или пропусти — тогда "
-        "напоминание будет приходить в момент, когда наступит срок, без фиксированного часа."
+        f"🕒 В какое время присылать напоминание про полив раз в {days} дн.?\n\n"
+        "Выбери кнопкой или напиши в чат собственное время."
     )
     kb = notify_time_keyboard("wztime", "wztskip", "wzcancel")
     if edit:
@@ -280,6 +279,26 @@ async def _finish_add(
 
 
 # ---------- Действия с зоной ----------
+
+
+@router.callback_query(F.data.startswith("wzwaterask:"))
+async def zone_water_ask(callback: CallbackQuery, user_id: int) -> None:
+    zone_id = int(callback.data.split(":", 1)[1])
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+    if zone is None:
+        await callback.answer("Зона уже удалена", show_alert=True)
+        return
+    await callback.answer()
+    kb = confirm_delete_keyboard(
+        f"wzwater:{zone_id}",
+        f"wz:{zone_id}",
+        confirm_label="✅ Да",
+        confirm_style="success",
+        cancel_label="⬅️ Назад",
+        cancel_style="primary",
+    )
+    await safe_edit_text(callback.message, f"Вы полили зону «{escape(zone.name)}»?", reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("wzwater:"))
@@ -424,9 +443,9 @@ async def zone_edit_time_start(callback: CallbackQuery, state: FSMContext, user_
     await state.update_data(zone_id=zone_id)
     await state.set_state(ZoneEdit.notify_time)
     await callback.message.edit_text(
-        f"🕒 В какое время (UTC) присылать напоминание про зону «{escape(zone.name)}»?\n\n"
+        f"🕒 В какое время присылать напоминание про зону «{escape(zone.name)}»?\n\n"
         f"Сейчас — {watering_service.describe_notify_time(zone.notify_time)}.\n"
-        "Выбери кнопкой, напиши своё время (например 09:30) или убери фиксированный час.",
+        "Выбери кнопкой или напиши в чат собственное время.",
         reply_markup=notify_time_keyboard(
             f"wzetime:{zone_id}", f"wztskip:{zone_id}", f"wz:{zone_id}", back_label="⬅️ Назад", back_style="primary"
         ),

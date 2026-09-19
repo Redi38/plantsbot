@@ -23,6 +23,10 @@ MAX_NAME_LENGTH = 100
 INTERVAL_PRESETS = (1, 2, 3, 5, 7, 10, 14, 21, 30)
 # Кнопки быстрого выбора времени напоминания (UTC) при создании/смене.
 NOTIFY_TIME_PRESETS = (time(7, 0), time(9, 0), time(12, 0), time(18, 0), time(20, 0), time(21, 0))
+# Смещение локального времени показа пользователю (Минск, UTC+3) от того,
+# как notify_time хранится в БД (наивный UTC).
+DISPLAY_UTC_OFFSET = timedelta(hours=3)
+DISPLAY_TZ_LABEL = "Минск, UTC+3"
 # На сколько дней можно отложить полив из напоминания.
 SNOOZE_OPTIONS = (1, 2, 3)
 
@@ -199,6 +203,12 @@ def describe_last_watered(last: datetime | None, now: datetime) -> str:
     return "сегодня" if days <= 0 else f"{days} дн. назад"
 
 
+def to_display_time(notify_time: time) -> time:
+    """Переводит время, хранимое в БД как наивный UTC, в локальное время
+    показа пользователю (Минск, UTC+3)."""
+    return (datetime.combine(datetime.min, notify_time) + DISPLAY_UTC_OFFSET).time()
+
+
 def render_overview(zones: list[WateringZone], now: datetime) -> str:
     if not zones:
         return (
@@ -209,7 +219,7 @@ def render_overview(zones: list[WateringZone], now: datetime) -> str:
     lines = ["💧 <b>Зоны полива</b>\n"]
     for zone in zones:
         icon = "🔔" if is_due(zone, now) else "🌱"
-        time_suffix = f", в {zone.notify_time.strftime('%H:%M')}" if zone.notify_time else ""
+        time_suffix = f", в {to_display_time(zone.notify_time).strftime('%H:%M')}" if zone.notify_time else ""
         lines.append(
             f"{icon} <b>{escape(zone.name)}</b> — раз в {zone.interval_days} дн.{time_suffix}, "
             f"{describe_due(zone.next_watering_at, now)}"
@@ -218,7 +228,10 @@ def render_overview(zones: list[WateringZone], now: datetime) -> str:
 
 
 def describe_notify_time(notify_time: time | None) -> str:
-    return f"в {notify_time.strftime('%H:%M')} UTC" if notify_time else "без фиксированного часа"
+    if notify_time is None:
+        return "без фиксированного часа"
+    local = to_display_time(notify_time).strftime("%H:%M")
+    return f"в <b>{local}</b> ({DISPLAY_TZ_LABEL})"
 
 
 def render_card(zone: WateringZone, now: datetime) -> str:

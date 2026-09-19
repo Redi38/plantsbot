@@ -5,12 +5,13 @@
   wzmenu             — назад к списку зон
   wzadd / wzcancel   — начать / отменить создание зоны
   wzint:{days}       — интервал при создании зоны
-  wztime:{HHMM} / wztskip — время напоминания при создании зоны / без фикс. часа
+  wztime:{HHMM} / wztskip — время напоминания при создании зоны / без фикс. часа (без кнопки, оставлен для колбэка)
   wzedit:{id}        — сменить интервал зоны
   wzeint:{id}:{days} — новый интервал существующей зоны
   wztedit:{id}                 — сменить время напоминания зоны
-  wzetime:{id}:{HHMM} / wztskip:{id} — новое время зоны / убрать фикс. час
-  wzwater:{id}       — «полил» из карточки
+  wzetime:{id}:{HHMM} / wztskip:{id} — новое время зоны / убрать фикс. час (без кнопки, оставлен для колбэка)
+  wzwater:{id}       — «полил» из карточки (после подтверждения)
+  wzwaterask:{id}    — запрос подтверждения «полил» из карточки
   wzdel:{id} / wzdelc:{id} — удалить (запрос / подтверждение)
   wzdone:{id}        — «полил» из напоминания
   wzlate:{id}:{days} — «отложить» из напоминания
@@ -22,15 +23,21 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db.models import WateringZone
-from bot.services.watering_service import INTERVAL_PRESETS, NOTIFY_TIME_PRESETS, SNOOZE_OPTIONS, is_due
+from bot.services.watering_service import (
+    INTERVAL_PRESETS,
+    NOTIFY_TIME_PRESETS,
+    SNOOZE_OPTIONS,
+    is_due,
+    to_display_time,
+)
 
 
 def zones_menu_keyboard(zones: list[WateringZone], now: datetime) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    builder.button(text="➕ Добавить зону", callback_data="wzadd", style="success")
     for zone in zones:
         icon = "🔔" if is_due(zone, now) else "💧"
         builder.button(text=f"{icon} {zone.name}", callback_data=f"wz:{zone.id}", style="primary")
-    builder.button(text="➕ Добавить зону", callback_data="wzadd", style="success")
     builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
     builder.adjust(1)
     return builder.as_markup()
@@ -38,7 +45,7 @@ def zones_menu_keyboard(zones: list[WateringZone], now: datetime) -> InlineKeybo
 
 def zone_card_keyboard(zone_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Полил", callback_data=f"wzwater:{zone_id}", style="success")
+    builder.button(text="✅ Полито", callback_data=f"wzwaterask:{zone_id}", style="success")
     builder.button(text="✏️ Интервал", callback_data=f"wzedit:{zone_id}", style="primary")
     builder.button(text="🕒 Время", callback_data=f"wztedit:{zone_id}", style="primary")
     builder.button(text="🗑 Удалить", callback_data=f"wzdel:{zone_id}", style="danger")
@@ -63,15 +70,22 @@ def interval_keyboard(
 def notify_time_keyboard(
     prefix: str, skip_data: str, back_data: str, *, back_label: str = "❌ Отмена", back_style: str = "danger"
 ) -> InlineKeyboardMarkup:
-    """Быстрый выбор времени напоминания сеткой 3×3 + «без фикс. часа».
+    """Быстрый выбор времени напоминания сеткой 3×3.
     Callback каждой кнопки — f"{prefix}:{HHMM}"; префикс различает создание
-    зоны и смену времени существующей."""
+    зоны и смену времени существующей. Кнопки «без фикс. часа» нет — чтобы
+    снять фиксированный час, нужно написать время в чат (skip_data по
+    прежнему принимается для обратной совместимости колбэков, но кнопкой
+    больше не рисуется)."""
     builder = InlineKeyboardBuilder()
     for t in NOTIFY_TIME_PRESETS:
-        builder.button(text=t.strftime("%H:%M"), callback_data=f"{prefix}:{t.strftime('%H%M')}", style="primary")
-    builder.button(text="🌊 Без фикс. часа", callback_data=skip_data, style="primary")
+        # Кнопка показывает время в локальной зоне (Минск, UTC+3), а
+        # callback_data по-прежнему кодирует исходное время в UTC — так
+        # хранение и расчёты в БД остаются в UTC без изменений.
+        builder.button(
+            text=to_display_time(t).strftime("%H:%M"), callback_data=f"{prefix}:{t.strftime('%H%M')}", style="primary"
+        )
     builder.button(text=back_label, callback_data=back_data, style=back_style)
-    builder.adjust(3, 3, 1, 1)
+    builder.adjust(3, 3, 1)
     return builder.as_markup()
 
 

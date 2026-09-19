@@ -68,17 +68,21 @@ def confirm_delete_keyboard(
     cancel_data: str,
     *,
     confirm_label: str = "🗑 Удалить",
+    confirm_style: str = "danger",
     cancel_label: str = "❌ Отмена",
     cancel_style: str = "danger",
 ) -> InlineKeyboardMarkup:
-    """Общая клавиатура подтверждения удаления — раньше три независимых
-    сценария (удаление растения через ИИ-агента, удаление растения из
-    просмотра списка, удаление группы целиком) строили один и тот же по
-    сути билдер (кнопка danger-удаления сверху + кнопка отмены/назад
-    снизу) каждый в своём модуле со своими подписями/callback_data.
-    Здесь — одна параметризуемая версия под все три случая."""
+    """Общая клавиатура подтверждения действия — раньше несколько
+    независимых сценариев (удаление растения через ИИ-агента, удаление
+    растения из просмотра списка, удаление группы целиком, отметка полива)
+    строили один и тот же по сути билдер (кнопка подтверждения сверху +
+    кнопка отмены/назад снизу) каждый в своём модуле со своими
+    подписями/callback_data/стилем. Здесь — одна параметризуемая версия
+    под все случаи; confirm_style по умолчанию «danger», как для удаления,
+    но для неопасных подтверждений (например, полива) можно передать
+    другой стиль."""
     builder = InlineKeyboardBuilder()
-    builder.button(text=confirm_label, callback_data=confirm_data, style="danger")
+    builder.button(text=confirm_label, callback_data=confirm_data, style=confirm_style)
     builder.button(text=cancel_label, callback_data=cancel_data, style=cancel_style)
     builder.adjust(1)
     return builder.as_markup()

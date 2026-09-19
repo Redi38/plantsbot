@@ -146,5 +146,5 @@ async def test_zones_menu_marks_due_zones(session, user_id):
     markup = kb.zones_menu_keyboard(zones, NOW + timedelta(days=1))
 
     texts = [button.text for row in markup.inline_keyboard for button in row]
-    assert texts[:2] == ["🔔 Пора", "💧 Рано"]
+    assert texts[:3] == ["➕ Добавить зону", "🔔 Пора", "💧 Рано"]
     assert f"wz:{due.id}" in _callbacks(markup)
