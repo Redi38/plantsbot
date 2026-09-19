@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 from aiogram import Bot, Dispatcher
@@ -9,9 +10,10 @@ from aiogram.types import ErrorEvent
 
 from bot.config import config
 from bot.db.database import init_db
-from bot.handlers import ai_agent, groups, import_, list_view, plants
+from bot.handlers import ai_agent, groups, import_, list_view, plants, watering
 from bot.middlewares.user import UserMiddleware
 from bot.services import ai_service
+from bot.services.watering_reminders import run_reminder_loop
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,12 +53,18 @@ async def main() -> None:
     dp.include_router(plants.router)
     dp.include_router(groups.router)
     dp.include_router(import_.router)
+    dp.include_router(watering.router)
+    # ai_agent — строго последним: он ловит любой свободный текст вне FSM.
     dp.include_router(ai_agent.router)
 
     await bot.delete_webhook(drop_pending_updates=True)
+    reminder_task = asyncio.create_task(run_reminder_loop(bot))
     try:
         await dp.start_polling(bot)
     finally:
+        reminder_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reminder_task
         await ai_service.close_session()
 
 

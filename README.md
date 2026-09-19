@@ -9,6 +9,7 @@ rather click through a browser than a chat.
 **What it can do:**
 - 📋 Keep plants organized into groups, with fuzzy search so typos don't matter
 - 📥 Import a whole collection at once from CSV or a plain-text/markdown list
+- 💧 Set up watering zones with reminders every N days — tap "Watered" or snooze right from the notification
 - 🤖 Talk to it naturally — "add alocasia polly, repotted in march" just works
 - 🖥️ Manage everything from a browser too, via the built-in admin panel
 
@@ -16,18 +17,44 @@ rather click through a browser than a chat.
 
 ## 💬 Using the bot
 
-The main menu keeps things simple — three buttons:
+The main menu keeps things simple — four buttons:
 
 | Button | What it does |
 |---|---|
 | 📋 List | Browse your plants and groups, edit or delete inline |
 | ➕ Add | Add a new plant |
 | 📥 Import | Bring in a list from a file or pasted text |
+| 💧 Watering | Watering zones with reminders (see below) |
 
 Plus two commands: `/start` (greeting and menu) and `/cancel_import` (bail
 out of an import in progress). Everything else — deleting, renaming,
 editing — happens either through the buttons in **📋 List**, or by just
 typing what you want and letting the AI agent handle it.
+
+## 💧 Watering zones
+
+A zone is a name plus a watering interval — «Windowsill, every 7 days».
+Press **💧 Watering → ➕ Add zone**, type a name, then pick the interval with
+a button or type any number of days (1–365). When the time comes the bot
+sends you a message:
+
+> 💧 Time to water the zone «Windowsill»
+
+with these buttons:
+
+| Button | What happens |
+|---|---|
+| ✅ Watered | Logs the watering, the next reminder comes one interval later |
+| ⏰ Snooze 1 / 2 / 3 days | Reminds you again after that many days; the interval stays as is |
+
+Inside **💧 Watering** you can also open a zone to mark it watered, change its
+interval, or delete it. Zones are independent from plant groups.
+
+Notes: the countdown always starts from the last actual watering (or from the
+moment you snoozed), so reminders don't land at a fixed hour of the day. Each
+due date produces one reminder — if you ignore it, the zone shows 🔔 in the
+list until you mark it watered or snooze it. Existing users need to send
+`/start` once to make Telegram show the new menu button.
 
 ## 📥 Import format
 
@@ -106,12 +133,14 @@ bot/
 ├── config.py
 ├── main.py
 ├── db/
-│   ├── models.py            # User, Group, Plant, AiLog
+│   ├── models.py            # User, Group, Plant, AiLog, WateringZone
 │   ├── database.py          # engine/session (SQLite + WAL)
 │   └── crud/                # get/list/create/update/delete per entity
 ├── services/
 │   ├── plant_service.py
 │   ├── group_service.py
+│   ├── watering_service.py  # zones: watered / snooze / interval, message texts
+│   ├── watering_reminders.py # background loop that sends due reminders
 │   ├── import_service.py    # CSV + markdown parsers, import preview
 │   └── ai_service/          # intent from free-form text (prompt, client, cache)
 ├── handlers/
@@ -119,11 +148,13 @@ bot/
 │   ├── plants/              # "➕ Add" button, editing/removing plants
 │   ├── groups.py            # renaming/deleting a group (with plant transfer)
 │   ├── import_.py           # "📥 Import" button — file or text, preview
+│   ├── watering.py          # "💧 Watering" button — zones + reminder buttons
 │   └── ai_agent/            # free-form text → intent → flow (add/delete/
 │                             # delete_group/create_group/rename_group/edit_plant/list)
 ├── keyboards/
 │   ├── reply.py             # main reply menu
-│   └── inline.py
+│   ├── inline.py
+│   └── watering.py
 ├── middlewares/
 │   └── user.py              # injects user_id into handlers
 └── utils/

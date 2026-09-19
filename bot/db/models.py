@@ -21,6 +21,7 @@ class User(Base):
 
     groups: Mapped[list["Group"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     plants: Mapped[list["Plant"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    zones: Mapped[list["WateringZone"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     @property
     def display_name(self) -> str:
@@ -81,3 +82,36 @@ class Plant(Base):
 
     user: Mapped["User"] = relationship(back_populates="plants")
     group: Mapped["Group | None"] = relationship(back_populates="plants")
+
+
+class WateringZone(Base):
+    """Зона полива: именованный набор растений, которые поливаются вместе
+    ("Подоконник", "Балкон"), с напоминанием раз в interval_days дней.
+
+    С группами растений (Group) зона намеренно не связана — группы про
+    организацию списка, зоны про расписание полива, и границы у них
+    часто не совпадают.
+
+    Все datetime здесь — наивные UTC (как и остальные поля проекта: SQLite
+    не хранит tzinfo). Время считается от последнего полива, а не от
+    фиксированного часа, поэтому часовой пояс пользователя не нужен.
+
+    notified_at — когда по текущему циклу уже отправили напоминание:
+    пока notified_at >= next_watering_at, повторно не напоминаем (иначе
+    планировщик слал бы одно и то же каждую минуту). Отложив полив, мы
+    сдвигаем next_watering_at вперёд, и условие снова становится ложным —
+    напоминание придёт ещё раз, когда отложенное время истечёт."""
+
+    __tablename__ = "watering_zones"
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_zone_user_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    interval_days: Mapped[int]
+    next_watering_at: Mapped[datetime] = mapped_column(index=True)
+    last_watered_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+    user: Mapped["User"] = relationship(back_populates="zones")

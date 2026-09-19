@@ -4,6 +4,7 @@
   groups.py   — Group: создание/поиск/переименование/удаление/перенос растений
   plants.py   — Plant: создание/поиск/обновление/удаление
   ai_logs.py  — AiLog: запись и чтение логов ИИ-агента
+  watering.py — WateringZone: зоны полива и поиск тех, про кого пора напомнить
 
 Снаружи используется так же, как раньше использовался модуль crud.py —
 весь плоский API собран здесь же одним re-export'ом:
@@ -47,6 +48,14 @@ from .users import (
     list_users,
     set_ungrouped_label,
 )
+from .watering import (
+    create_zone,
+    delete_zone,
+    get_zone,
+    get_zone_by_name,
+    list_due_zones,
+    list_zones,
+)
 
 __all__ = [
     "clear_user_plants",
@@ -54,9 +63,11 @@ __all__ = [
     "create_ai_log",
     "create_group",
     "create_plant",
+    "create_zone",
     "delete_group",
     "delete_group_with_plants",
     "delete_plant",
+    "delete_zone",
     "find_groups_fuzzy",
     "find_plant_by_name",
     "find_plant_by_name_any_group",
@@ -68,11 +79,15 @@ __all__ = [
     "get_or_create_user",
     "get_plant",
     "get_user",
+    "get_zone",
+    "get_zone_by_name",
     "list_ai_log_actions",
     "list_ai_logs_all",
     "list_ai_logs_for_user",
+    "list_due_zones",
     "list_groups",
     "list_users",
+    "list_zones",
     "move_group_plants",
     "rename_group",
     "set_ungrouped_label",
