@@ -54,6 +54,7 @@ class ZoneAdd(StatesGroup):
 
 
 class ZoneEdit(StatesGroup):
+    name = State()
     interval = State()
     notify_time = State()
 
@@ -348,6 +349,78 @@ async def zone_delete_apply(callback: CallbackQuery, user_id: int) -> None:
     await callback.answer("Удалено")
     text, kb = await _menu_view(user_id, f"✅ Зона «{escape(name)}» удалена.")
     await safe_edit_text(callback.message, text, reply_markup=kb)
+
+
+# ---------- Смена названия ----------
+
+
+@router.callback_query(F.data.startswith("wzrename:"))
+async def zone_rename_start(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    zone_id = int(callback.data.split(":", 1)[1])
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+    if zone is None:
+        await callback.answer("Зона уже удалена", show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    await state.update_data(zone_id=zone_id)
+    await state.set_state(ZoneEdit.name)
+    await callback.message.edit_text(
+        f"✏️ Новое название для зоны «{escape(zone.name)}»?",
+        reply_markup=cancel_keyboard(f"wz:{zone_id}", label="⬅️ Назад", style="primary"),
+    )
+    await track_callback(callback, state)
+
+
+async def _apply_rename(user_id: int, zone_id: int, name: str) -> tuple[bool, str | None]:
+    """(найдена_ли_зона, текст_ошибки_валидации). Если зона не найдена —
+    (False, None); если найдена, но имя не подошло — (False, "⚠️ ...");
+    при успехе — (True, None)."""
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+        if zone is None:
+            return False, None
+        try:
+            await watering_service.rename(session, zone, name)
+        except watering_service.ZoneAlreadyExists:
+            return False, f"⚠️ Зона «{escape(name.strip())}» уже есть. Придумай другое название."
+        except ValueError:
+            return False, f"⚠️ Название должно быть от 1 до {MAX_NAME_LENGTH} символов. Попробуй ещё раз."
+    return True, None
+
+
+@router.message(StateFilter(ZoneEdit.name), F.text, ~F.text.in_(MENU_BUTTONS))
+async def zone_rename_apply(message: Message, state: FSMContext, user_id: int) -> None:
+    await delete_user_message(message)
+    data = await state.get_data()
+    zone_id = data["zone_id"]
+    name = message.text.strip()
+
+    ok, err = await _apply_rename(user_id, zone_id, name)
+    if err is not None:
+        await render(
+            message,
+            state,
+            err,
+            reply_markup=cancel_keyboard(f"wz:{zone_id}", label="⬅️ Назад", style="primary"),
+        )
+        return
+
+    tracked_id = await pop_tracked(state)
+    await state.clear()
+    if tracked_id:
+        await safe_delete_message(message.bot, message.chat.id, tracked_id)
+
+    if not ok:
+        await message.answer(_NOT_FOUND)
+        return
+    view = await _card_view(user_id, zone_id, notice=f"✅ Название изменено на «{escape(name)}».")
+    if view is None:
+        await message.answer(_NOT_FOUND)
+        return
+    text, kb = view
+    await message.answer(text, reply_markup=kb)
 
 
 # ---------- Смена интервала ----------

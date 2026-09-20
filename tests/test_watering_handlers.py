@@ -323,6 +323,42 @@ async def test_water_button_asks_confirmation_before_recording(app):
     assert (await _zones())[0].last_watered_at is not None
 
 
+async def test_rename_zone(app):
+    zone_id = await _create_zone(app, "Подоконник", 7)
+
+    await app.press(f"wzrename:{zone_id}")
+    assert "Новое название для зоны «Подоконник»?" in app.tg.last_visible_text()
+
+    await app.say("Балкон")
+    assert "Название изменено на «Балкон»." in app.tg.last_visible_text()
+    assert (await _zones())[0].name == "Балкон"
+
+
+async def test_rename_zone_rejects_duplicate_name(app):
+    await _create_zone(app, "Подоконник", 7)
+    await app.say(BTN_WATER)
+    await app.press("wzadd")
+    await app.say("Балкон")
+    await app.say("7")
+    await app.press("wztskip")  # без фиксированного часа напоминания
+    zone_id = next(z.id for z in await _zones() if z.name == "Балкон")
+
+    await app.press(f"wzrename:{zone_id}")
+    await app.say("Подоконник")
+    assert "уже есть" in app.tg.last_visible_text()
+    names = sorted(z.name for z in await _zones())
+    assert names == ["Балкон", "Подоконник"]
+
+
+async def test_rename_zone_rejects_too_long_name(app):
+    zone_id = await _create_zone(app, "Подоконник", 7)
+
+    await app.press(f"wzrename:{zone_id}")
+    await app.say("Ф" * 200)
+    assert "от 1 до" in app.tg.last_visible_text()
+    assert (await _zones())[0].name == "Подоконник"
+
+
 async def test_change_interval_by_button_and_by_text(app):
     zone_id = await _create_zone(app, "Подоконник", 7)
 
@@ -416,7 +452,14 @@ async def test_buttons_of_deleted_zone_do_not_crash(app):
     await app.press(f"wzdelc:{zone_id}")
     calls_before = len(app.tg.calls)
 
-    for data in (f"wz:{zone_id}", f"wzwater:{zone_id}", f"wzdone:{zone_id}", f"wzlate:{zone_id}:1", f"wzedit:{zone_id}"):
+    for data in (
+        f"wz:{zone_id}",
+        f"wzwater:{zone_id}",
+        f"wzdone:{zone_id}",
+        f"wzlate:{zone_id}:1",
+        f"wzedit:{zone_id}",
+        f"wzrename:{zone_id}",
+    ):
         await app.press(data)
 
     assert len(app.tg.calls) > calls_before  # бот ответил, а не упал молча

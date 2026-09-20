@@ -8,6 +8,7 @@
   wztime:{HHMM} / wztskip — время напоминания при создании зоны / без фикс. часа (без кнопки, оставлен для колбэка)
   wzedit:{id}        — сменить интервал зоны
   wzeint:{id}:{days} — новый интервал существующей зоны
+  wzrename:{id}      — сменить название зоны
   wztedit:{id}                 — сменить время напоминания зоны
   wzetime:{id}:{HHMM} / wztskip:{id} — новое время зоны / убрать фикс. час (без кнопки, оставлен для колбэка)
   wzwater:{id}       — «полил» из карточки (после подтверждения)
@@ -46,11 +47,12 @@ def zones_menu_keyboard(zones: list[WateringZone], now: datetime) -> InlineKeybo
 def zone_card_keyboard(zone_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Полито", callback_data=f"wzwaterask:{zone_id}", style="success")
-    builder.button(text="✏️ Интервал", callback_data=f"wzedit:{zone_id}", style="primary")
+    builder.button(text="✏️ Название", callback_data=f"wzrename:{zone_id}", style="primary")
+    builder.button(text="⏱ Интервал", callback_data=f"wzedit:{zone_id}", style="primary")
     builder.button(text="🕒 Время", callback_data=f"wztedit:{zone_id}", style="primary")
     builder.button(text="🗑 Удалить", callback_data=f"wzdel:{zone_id}", style="danger")
     builder.button(text="⬅️ Назад", callback_data="wzmenu", style="primary")
-    builder.adjust(1, 2, 1, 1)
+    builder.adjust(1, 3, 1, 1)
     return builder.as_markup()
 
 
@@ -89,9 +91,9 @@ def notify_time_keyboard(
     return builder.as_markup()
 
 
-def cancel_keyboard(callback_data: str = "wzcancel") -> InlineKeyboardMarkup:
+def cancel_keyboard(callback_data: str = "wzcancel", *, label: str = "❌ Отмена", style: str = "danger") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(text="❌ Отмена", callback_data=callback_data, style="danger")
+    builder.button(text=label, callback_data=callback_data, style=style)
     return builder.as_markup()
 
 
