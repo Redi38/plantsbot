@@ -27,7 +27,7 @@ watering.ask_notify_time для bot/handlers/ai_agent/zone_flow.py."""
 
 from aiogram import Router
 
-router = Router(name="watering")
+router: Router = Router(name="watering")
 
 # Подмодули регистрируют хендлеры на общий router как побочный эффект
 # импорта — сами модули дальше не используются напрямую, кроме
@@ -35,4 +35,4 @@ router = Router(name="watering")
 from . import actions, edit_flow, menu  # noqa: E402,F401
 from .add_flow import ask_interval, ask_notify_time  # noqa: E402
 
-__all__ = ["router", "ask_interval", "ask_notify_time"]
+__all__ = ["ask_interval", "ask_notify_time", "router"]

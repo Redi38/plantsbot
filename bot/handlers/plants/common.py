@@ -63,8 +63,3 @@ def plant_pick_keyboard(
     builder.adjust(*row_sizes)
     return builder.as_markup()
 
-
-def cancel_keyboard() -> InlineKeyboardBuilder:
-    builder = InlineKeyboardBuilder()
-    builder.button(text="❌ Отмена", callback_data="addcancel", style="danger")
-    return builder

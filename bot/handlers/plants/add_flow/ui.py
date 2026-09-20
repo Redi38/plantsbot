@@ -7,11 +7,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db import crud
 from bot.db.database import get_session
-from bot.keyboards.inline import groups_keyboard
+from bot.keyboards.inline import cancel_keyboard, groups_keyboard
 from bot.services import plant_service
 from bot.utils.chat import render, track_callback
-
-from ..common import cancel_keyboard
 
 
 class AddPlant(StatesGroup):
@@ -36,7 +34,7 @@ async def show_step(event: Message | CallbackQuery, state: FSMContext, text: str
 async def ask_comment(event: Message | CallbackQuery, state: FSMContext, *, prefix: str = "") -> None:
     await state.set_state(AddPlant.comment)
     await show_step(
-        event, state, f"{prefix}💬 Комментарий есть? Напиши текстом или пришли /skip", cancel_keyboard().as_markup()
+        event, state, f"{prefix}💬 Комментарий есть? Напиши текстом или пришли /skip", cancel_keyboard("addcancel")
     )
 
 

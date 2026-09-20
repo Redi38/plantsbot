@@ -91,12 +91,6 @@ def notify_time_keyboard(
     return builder.as_markup()
 
 
-def cancel_keyboard(callback_data: str = "wzcancel", *, label: str = "❌ Отмена", style: str = "danger") -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.button(text=label, callback_data=callback_data, style=style)
-    return builder.as_markup()
-
-
 def reminder_keyboard(zone_id: int) -> InlineKeyboardMarkup:
     """Кнопки под напоминанием: «Полил» и ряд «отложить на N дн.»."""
     builder = InlineKeyboardBuilder()

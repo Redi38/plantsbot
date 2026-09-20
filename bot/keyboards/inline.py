@@ -55,6 +55,24 @@ def groups_keyboard(
     return builder.as_markup()
 
 
+def cancel_keyboard(
+    callback_data: str, *, label: str = "❌ Отмена", style: str = "danger"
+) -> InlineKeyboardMarkup:
+    """Клавиатура из одной кнопки — раньше отдельно жила в
+    bot/keyboards/watering.py (для сценариев зон полива) и в
+    bot/handlers/plants/common.py (для сценария добавления растения,
+    с захардкоженным callback_data="addcancel"). callback_data сделан
+    обязательным без дефолта нарочно: у дефолта "на всякий случай"
+    легко забыть про переопределение и получить кнопку, которая
+    рисуется, но никуда не ведёт — ни один хендлер её не слушает.
+    Заодно переиспользуется как «одна кнопка снизу» не только для
+    отмены (watering/edit_flow.py передаёт сюда «⬅️ Назад» с другим
+    callback_data/label/style)."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text=label, callback_data=callback_data, style=style)
+    return builder.as_markup()
+
+
 def confirm_keyboard(yes_data: str, no_data: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Импортировать", callback_data=yes_data, style="success")

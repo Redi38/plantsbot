@@ -16,8 +16,9 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.db import crud
 from bot.db.database import get_session
+from bot.keyboards.inline import cancel_keyboard
 from bot.keyboards.reply import MENU_BUTTONS
-from bot.keyboards.watering import cancel_keyboard, interval_keyboard, notify_time_keyboard
+from bot.keyboards.watering import interval_keyboard, notify_time_keyboard
 from bot.services import watering_service
 from bot.services.watering_service import MAX_INTERVAL_DAYS, MAX_NAME_LENGTH, MIN_INTERVAL_DAYS
 from bot.utils.chat import (
@@ -44,7 +45,7 @@ async def zone_add_start(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ZoneAdd.name)
     await callback.message.edit_text(
         "💧 Как назвать зону полива?\n\nНапример: «Подоконник», «Суккуленты», «Балкон»",
-        reply_markup=cancel_keyboard(),
+        reply_markup=cancel_keyboard("wzcancel"),
     )
     await track_callback(callback, state)
 
@@ -65,7 +66,7 @@ async def zone_add_name(message: Message, state: FSMContext, user_id: int) -> No
     if not name or len(name) > MAX_NAME_LENGTH:
         await render(
             message, state, f"⚠️ Название должно быть от 1 до {MAX_NAME_LENGTH} символов. Попробуй ещё раз.",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard("wzcancel"),
         )
         return
 
@@ -74,7 +75,7 @@ async def zone_add_name(message: Message, state: FSMContext, user_id: int) -> No
     if existing:
         await render(
             message, state, f"⚠️ Зона «{escape(existing.name)}» уже есть. Придумай другое название.",
-            reply_markup=cancel_keyboard(),
+            reply_markup=cancel_keyboard("wzcancel"),
         )
         return
 

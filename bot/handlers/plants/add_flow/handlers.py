@@ -8,11 +8,11 @@ from aiogram.types import CallbackQuery, Message
 from bot.db import crud
 from bot.db.database import get_session
 from bot.handlers.list_view import show_group_page
+from bot.keyboards.inline import cancel_keyboard
 from bot.keyboards.reply import BTN_ADD, MENU_BUTTONS
 from bot.utils.chat import begin_dialog, delete_user_message, render, safe_delete_message, track_callback
 
 from .. import router
-from ..common import cancel_keyboard
 from .actions import finalize_add, proceed_after_group
 from .ui import AddPlant, ask_comment, show_group_choice, warn_duplicate
 
@@ -24,7 +24,7 @@ async def cmd_add(message: Message, state: FSMContext) -> None:
     if old_msg_id:
         await safe_delete_message(message.bot, message.chat.id, old_msg_id)
     await state.set_state(AddPlant.name)
-    await render(message, state, "🌱 Как называется растение?", reply_markup=cancel_keyboard().as_markup())
+    await render(message, state, "🌱 Как называется растение?", reply_markup=cancel_keyboard("addcancel"))
 
 
 @router.callback_query(F.data.startswith("lgadd:"))
@@ -41,7 +41,7 @@ async def lgadd_start(callback: CallbackQuery, state: FSMContext) -> None:
     if token != "all":
         await state.update_data(preset_group_id=None if token == "none" else int(token))
     await state.set_state(AddPlant.name)
-    await callback.message.edit_text("🌱 Как называется растение?", reply_markup=cancel_keyboard().as_markup())
+    await callback.message.edit_text("🌱 Как называется растение?", reply_markup=cancel_keyboard("addcancel"))
     await track_callback(callback, state)
 
 
@@ -106,7 +106,7 @@ async def add_choose_group(callback: CallbackQuery, state: FSMContext) -> None:
 
     if value == "new":
         await state.set_state(AddPlant.new_group_name)
-        await callback.message.edit_text("🆕 Название новой группы?", reply_markup=cancel_keyboard().as_markup())
+        await callback.message.edit_text("🆕 Название новой группы?", reply_markup=cancel_keyboard("addcancel"))
         await track_callback(callback, state)
         return
 

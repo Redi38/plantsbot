@@ -13,8 +13,9 @@ from aiogram.types import CallbackQuery, Message
 
 from bot.db import crud
 from bot.db.database import get_session
+from bot.keyboards.inline import cancel_keyboard
 from bot.keyboards.reply import MENU_BUTTONS
-from bot.keyboards.watering import cancel_keyboard, interval_keyboard, notify_time_keyboard
+from bot.keyboards.watering import interval_keyboard, notify_time_keyboard
 from bot.services import watering_service
 from bot.services.watering_service import MAX_INTERVAL_DAYS, MAX_NAME_LENGTH, MIN_INTERVAL_DAYS
 from bot.utils.chat import delete_user_message, pop_tracked, render, safe_delete_message, safe_edit_text, track_callback
@@ -22,7 +23,6 @@ from bot.utils.chat import delete_user_message, pop_tracked, render, safe_delete
 from . import router
 from .common import NOT_FOUND, card_view, edit_to_card, leave_zone_dialog
 from .states import ZoneEdit
-
 
 # ---------- Смена названия ----------
 
