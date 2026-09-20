@@ -35,6 +35,7 @@ async def parse_intent(
     existing_groups: list[str] | None = None,
     existing_plants: list[str] | None = None,
     user_id: int | None = None,
+    existing_zones: list[str] | None = None,
 ) -> dict:
     if not config.ai_enabled:
         raise AIServiceUnavailable("ИИ-агент отключён (AI_ENABLED=false)")
@@ -44,12 +45,12 @@ async def parse_intent(
 
     key = None
     if user_id is not None:
-        key = cache_key(user_id, user_text, existing_groups, existing_plants)
+        key = cache_key(user_id, user_text, existing_groups, existing_plants, existing_zones)
         cached = cache_get(key)
         if cached is not None:
             return cached
 
-    system_prompt = build_system_prompt(existing_groups, existing_plants)
+    system_prompt = build_system_prompt(existing_groups, existing_plants, existing_zones)
 
     used_json_mode = True
     try:

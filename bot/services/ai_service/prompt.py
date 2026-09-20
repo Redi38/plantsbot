@@ -18,14 +18,22 @@ SYSTEM_PROMPT_TEMPLATE = """Ты помощник бота для учёта к�
 
 Формат ответа:
 {{
-  "action": "add" | "delete" | "delete_group" | "create_group" | "rename_group" | "edit_plant" | "list" | "unknown",
+  "action": "add" | "delete" | "delete_group" | "create_group" | "rename_group" | "edit_plant" | "list" | \
+"zone_add" | "zone_water" | "zone_snooze" | "zone_interval" | "zone_time" | "zone_rename" | "zone_delete" | \
+"zone_list" | "unknown",
   "plant_name": "название растения (с заглавной буквы) или null",
   "group_name": "название группы или null",
   "comment": "комментарий, если пользователь его указал, иначе null",
-  "new_name": "новое название — для rename_group (новое имя группы) или edit_plant (новое имя растения), иначе null",
+  "new_name": "новое название — для rename_group (новое имя группы), edit_plant (новое имя растения) \
+или zone_rename (новое имя зоны полива), иначе null",
+  "zone_name": "название зоны полива или null",
+  "interval_days": целое число дней (1-365) для zone_add / zone_interval, иначе null,
+  "snooze_days": целое число дней (1-365) для zone_snooze, иначе null,
+  "notify_time": "ЧЧ:ММ" для zone_add / zone_time, "" (пустая строка) для zone_time, если просят убрать \
+время напоминания, иначе null,
   "matched_plants": null или JSON-массив строк, например ["Alocasia Polly", "Alocasia Odora"] — см. ниже про action="list"
 }}
-{plants_block}
+{plants_block}{zones_block}
 action="delete_group" — когда пользователь просит удалить ЦЕЛИКОМ группу \
 растений (например "удали группу Суккуленты", "снеси группу Кактусы вместе со \
 всеми растениями"). group_name — название удаляемой группы, plant_name и \
@@ -93,6 +101,56 @@ group_name: null, покажется общее меню групп. Если т
 matched_plants: null (не пустая строка, не пустой текст). Для всех \
 остальных action matched_plants всегда null. plant_name и comment — null.
 
+Зоны полива — это НЕ растения и НЕ группы растений, а отдельная сущность: \
+именованный набор растений, которые поливаются вместе (например «Подоконник», \
+«Балкон»), с расписанием «раз в N дней» и напоминанием в заданное время. \
+Действия с зонами (zone_*) выбирай, только когда речь про полив, расписание или \
+напоминания о поливе; название зоны бери ТОЧНО так, как оно написано в списке \
+зон выше (посимвольно), даже если пользователь написал с опечаткой, в другом \
+падеже или на другом языке. Если зона с таким названием в списке точно не \
+подходит — верни zone_name так, как написал пользователь. Для всех zone_* \
+plant_name, group_name и comment — null, matched_plants — null.
+
+action="zone_add" — создать новую зону полива (например "создай зону Балкон, \
+поливать раз в 5 дней, напоминай в 9 утра"). zone_name — название новой зоны, \
+interval_days — как часто поливать, notify_time — во сколько напоминать. \
+Если интервал или время пользователь не назвал — верни для них null, бот сам \
+спросит кнопками.
+
+action="zone_water" — пользователь сообщает, что полил зону ("полил подоконник", \
+"я полила балкон"). zone_name — зона, остальные поля null. Если он полил \
+конкретное растение, а не зону, всё равно верни zone_water с тем названием, как \
+он написал — бот сам подскажет, какие зоны есть.
+
+action="zone_snooze" — отложить напоминание о поливе ("отложи полив балкона на \
+2 дня", "напомни про подоконник завтра"). zone_name — зона, snooze_days — на \
+сколько дней отложить ("завтра" = 1, "послезавтра" = 2, "на неделю" = 7). Если \
+срок не назван — snooze_days: null.
+
+action="zone_interval" — сменить периодичность полива зоны ("поливай балкон раз \
+в 3 дня", "подоконник теперь раз в неделю"). zone_name — зона, interval_days — \
+новое число дней ("каждый день" = 1, "раз в неделю" = 7, "раз в две недели" = 14, \
+"раз в месяц" = 30).
+
+action="zone_time" — сменить время напоминания зоны ("напоминай про подоконник в \
+8 вечера"). zone_name — зона, notify_time — время в формате "ЧЧ:ММ" 24-часовом \
+(например "20:00"), ровно то время, которое назвал пользователь — часовые \
+пояса не пересчитывай, бот сделает это сам. Если просят убрать фиксированное \
+время напоминания — notify_time: "" (пустая строка).
+
+action="zone_rename" — переименовать зону полива ("переименуй зону Балкон в \
+Лоджия"). zone_name — текущее название зоны, new_name — новое название. Не путай \
+с rename_group (переименование группы РАСТЕНИЙ).
+
+action="zone_delete" — удалить зону полива ("удали зону Балкон"). zone_name — \
+удаляемая зона. Растения при этом не удаляются — зона про расписание полива, а не \
+про сами растения. Не путай с delete_group (удаление группы растений).
+
+action="zone_list" — показать зоны полива или одну зону: "покажи зоны полива", \
+"что пора поливать", "когда следующий полив на балконе", "как там подоконник". \
+Если речь про одну зону — верни её zone_name, если про все — zone_name: null. \
+Не путай с action="list" (список РАСТЕНИЙ и групп).
+
 Если не можешь понять намерение — action: "unknown".
 """
 
@@ -145,6 +203,14 @@ _NO_GROUPS_BLOCK = """
 непонятно — верни null.
 """
 
+_ZONES_BLOCK_TEMPLATE = """
+У пользователя уже есть такие зоны полива: {zones_list}.
+"""
+
+_NO_ZONES_BLOCK = """
+У пользователя пока нет ни одной зоны полива.
+"""
+
 _MAX_PLANTS_IN_PROMPT = 300
 
 
@@ -184,7 +250,11 @@ def select_relevant_plants(user_text: str, existing_plants: list[str], limit: in
     return result
 
 
-def build_system_prompt(existing_groups: list[str] | None, existing_plants: list[str] | None) -> str:
+def build_system_prompt(
+    existing_groups: list[str] | None,
+    existing_plants: list[str] | None,
+    existing_zones: list[str] | None = None,
+) -> str:
     if existing_groups:
         groups_block = _GROUPS_BLOCK_TEMPLATE.format(groups_list=", ".join(f"«{g}»" for g in existing_groups))
     else:
@@ -193,4 +263,8 @@ def build_system_prompt(existing_groups: list[str] | None, existing_plants: list
         plants_block = _PLANTS_BLOCK_TEMPLATE.format(plants_list=", ".join(f"«{p}»" for p in existing_plants))
     else:
         plants_block = _NO_PLANTS_BLOCK
-    return SYSTEM_PROMPT_TEMPLATE.format(groups_block=groups_block, plants_block=plants_block)
+    if existing_zones:
+        zones_block = _ZONES_BLOCK_TEMPLATE.format(zones_list=", ".join(f"«{z}»" for z in existing_zones))
+    else:
+        zones_block = _NO_ZONES_BLOCK
+    return SYSTEM_PROMPT_TEMPLATE.format(groups_block=groups_block, plants_block=plants_block, zones_block=zones_block)

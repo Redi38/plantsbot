@@ -52,6 +52,7 @@ class AiLog(Base):
     action: Mapped[str | None] = mapped_column(String(32), nullable=True)
     plant_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     group_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    zone_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))

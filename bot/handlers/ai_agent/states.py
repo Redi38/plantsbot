@@ -15,3 +15,8 @@ class AIDelete(StatesGroup):
 
 class AIEdit(StatesGroup):
     pick_plant = State()  # несколько совпадений по имени — какое изменить
+
+
+class AIZone(StatesGroup):
+    pick_zone = State()       # несколько зон подходят под название — какая именно
+    confirm_delete = State()  # "точно удалить зону «X»?"

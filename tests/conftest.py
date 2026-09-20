@@ -17,6 +17,12 @@ from sqlalchemy.pool import StaticPool
 from bot.db import crud
 from bot.db.models import Base
 
+# Стенд для сквозных проверок хендлеров (настоящий Dispatcher + фейковый
+# Telegram) живёт в tests/test_watering_handlers.py. Перевыставляем его
+# фикстуры здесь, чтобы ими могли пользоваться и другие тестовые модули
+# (tests/test_ai_zone_flow.py), не импортируя фикстуры друг у друга.
+from tests.test_watering_handlers import app, dispatcher
+
 
 @pytest_asyncio.fixture
 async def session() -> AsyncSession:

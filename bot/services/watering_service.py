@@ -5,7 +5,6 @@
 
 Время везде — наивный UTC, как в остальных таблицах проекта."""
 
-import math
 import re
 from datetime import datetime, time, timedelta, timezone
 from html import escape
@@ -186,14 +185,20 @@ def is_due(zone: WateringZone, now: datetime) -> bool:
 
 def describe_due(next_at: datetime, now: datetime) -> str:
     """Человекочитаемо: сколько осталось до полива или насколько просрочен.
-    Даты умышленно не показываем — у пользователя свой часовой пояс, а мы
-    считаем в UTC, и «завтра» могло бы оказаться неверным днём."""
+
+    Остаток считается в календарных днях по местному времени показа
+    (Минск, UTC+3), без учёта текущего дня: сегодня 20-е, срок 27-го в 12:00
+    -> «через 7 дн.» независимо от того, сколько сейчас на часах (раньше
+    остаток округлялся вверх по часам, и до 12:00 показывалось «через 8»).
+    Даты умышленно не показываем, только число дней."""
     delta = next_at - now
     if delta <= timedelta(0):
         overdue_days = (-delta).days
         return "пора поливать" if overdue_days == 0 else f"просрочено на {overdue_days} дн."
-    days = math.ceil(delta / timedelta(days=1))
-    return "меньше чем через сутки" if days <= 1 else f"через {days} дн."
+    days = ((next_at + DISPLAY_UTC_OFFSET).date() - (now + DISPLAY_UTC_OFFSET).date()).days
+    if days <= 0:
+        return "сегодня"
+    return "завтра" if days == 1 else f"через {days} дн."
 
 
 def describe_last_watered(last: datetime | None, now: datetime) -> str:
@@ -207,6 +212,14 @@ def to_display_time(notify_time: time) -> time:
     """Переводит время, хранимое в БД как наивный UTC, в локальное время
     показа пользователю (Минск, UTC+3)."""
     return (datetime.combine(datetime.min, notify_time) + DISPLAY_UTC_OFFSET).time()
+
+
+def from_display_time(local_time: time) -> time:
+    """Обратное к to_display_time: локальное время пользователя (Минск,
+    UTC+3) -> наивный UTC для хранения в БД. Базовая дата — не
+    datetime.min: вычитание смещения из 00:00 первого дня выходит за
+    границы datetime и падает с OverflowError."""
+    return (datetime(2000, 1, 1, local_time.hour, local_time.minute) - DISPLAY_UTC_OFFSET).time()
 
 
 def render_overview(zones: list[WateringZone], now: datetime) -> str:

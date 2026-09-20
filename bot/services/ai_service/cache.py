@@ -10,13 +10,18 @@ _intent_cache: "OrderedDict[tuple, tuple[dict, float]]" = OrderedDict()
 
 
 def cache_key(
-    user_id: int, user_text: str, existing_groups: list[str] | None, existing_plants: list[str] | None
+    user_id: int,
+    user_text: str,
+    existing_groups: list[str] | None,
+    existing_plants: list[str] | None,
+    existing_zones: list[str] | None = None,
 ) -> tuple:
     return (
         user_id,
         user_text.strip().lower(),
         tuple(existing_groups or ()),
         tuple(existing_plants or ()),
+        tuple(existing_zones or ()),
     )
 
 

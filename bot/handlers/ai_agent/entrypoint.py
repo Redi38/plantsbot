@@ -14,7 +14,8 @@ action -> обработчик (см. _ACTION_HANDLERS ниже): каждый �
 запросом (в т.ч. когда результат — сообщение об ошибке пользователю),
 или False, если для этого action в intent не хватило обязательных полей
 (например action="add" без plant_name) — тогда падаем в общий ответ
-"не поняла" в конце handle_free_text.
+"не поняла" в конце handle_free_text. Действия с зонами полива (zone_*)
+лежат в zone_flow.py и подключаются через адаптер _zone_dispatch.
 """
 
 import logging
@@ -29,7 +30,7 @@ from aiogram.types import Message
 from bot.config import config
 from bot.db import crud
 from bot.db.database import get_session
-from bot.db.models import Group, Plant
+from bot.db.models import Group, Plant, WateringZone
 from bot.handlers.list_view import group_menu_text_and_kb, send_group_page
 from bot.services import ai_service, plant_service
 from bot.utils.chat import begin_dialog, safe_delete_message
@@ -40,6 +41,16 @@ from .common import reply_group_not_found, resolve_group
 from .delete_flow import handle_delete_intent
 from .edit_flow import handle_edit_plant_intent
 from .group_actions import handle_create_group_intent, handle_delete_group_intent, handle_rename_group_intent
+from .zone_flow import (
+    handle_zone_add_intent,
+    handle_zone_delete_intent,
+    handle_zone_interval_intent,
+    handle_zone_list_intent,
+    handle_zone_rename_intent,
+    handle_zone_snooze_intent,
+    handle_zone_time_intent,
+    handle_zone_water_intent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +68,7 @@ class _Ctx:
     groups: list[Group]
     ungrouped: list[Plant]
     all_plants: list[Plant]
+    zones: list[WateringZone]
 
 
 async def _dispatch_add(ctx: _Ctx) -> bool:
@@ -150,6 +162,19 @@ async def _dispatch_list(ctx: _Ctx) -> bool:
     return True
 
 
+ZoneHandler = Callable[[Message, FSMContext, int, dict, list[WateringZone]], Awaitable[bool]]
+
+
+def _zone_dispatch(handler: ZoneHandler) -> Callable[[_Ctx], Awaitable[bool]]:
+    """Все zone_*-обработчики (см. zone_flow.py) принимают одни и те же
+    аргументы — этот адаптер просто достаёт их из _Ctx."""
+
+    async def dispatch(ctx: _Ctx) -> bool:
+        return await handler(ctx.message, ctx.state, ctx.user_id, ctx.intent, ctx.zones)
+
+    return dispatch
+
+
 _ACTION_HANDLERS: dict[str, Callable[[_Ctx], Awaitable[bool]]] = {
     "add": _dispatch_add,
     "delete_group": _dispatch_delete_group,
@@ -158,6 +183,14 @@ _ACTION_HANDLERS: dict[str, Callable[[_Ctx], Awaitable[bool]]] = {
     "delete": _dispatch_delete,
     "edit_plant": _dispatch_edit_plant,
     "list": _dispatch_list,
+    "zone_add": _zone_dispatch(handle_zone_add_intent),
+    "zone_water": _zone_dispatch(handle_zone_water_intent),
+    "zone_snooze": _zone_dispatch(handle_zone_snooze_intent),
+    "zone_interval": _zone_dispatch(handle_zone_interval_intent),
+    "zone_time": _zone_dispatch(handle_zone_time_intent),
+    "zone_rename": _zone_dispatch(handle_zone_rename_intent),
+    "zone_delete": _zone_dispatch(handle_zone_delete_intent),
+    "zone_list": _zone_dispatch(handle_zone_list_intent),
 }
 
 
@@ -168,7 +201,9 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
 
     async with get_session() as session:
         groups, ungrouped = await crud.get_full_tree(session, user_id)
+        zones = await crud.list_zones(session, user_id)
     existing_group_names = [g.name for g in groups]
+    existing_zone_names = [z.name for z in zones]
     all_plants = ungrouped[:] + [p for g in groups for p in g.plants]
     existing_plant_names = list({p.name.strip().lower(): p.name for p in all_plants}.values())
 
@@ -178,6 +213,7 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
             existing_groups=existing_group_names,
             existing_plants=existing_plant_names,
             user_id=user_id,
+            existing_zones=existing_zone_names,
         )
     except ai_service.AIServiceRateLimited as exc:
         logger.warning("AI-агент: провайдер превысил лимит запросов: %s", exc)
@@ -210,12 +246,13 @@ async def handle_free_text(message: Message, state: FSMContext, user_id: int) ->
             plant_name=intent.get("plant_name"),
             group_name=intent.get("group_name"),
             comment=intent.get("comment"),
+            zone_name=intent.get("zone_name"),
         )
         await session.commit()
 
     handler = _ACTION_HANDLERS.get(action) if action else None
     if handler:
-        ctx = _Ctx(message, state, user_id, intent, groups, ungrouped, all_plants)
+        ctx = _Ctx(message, state, user_id, intent, groups, ungrouped, all_plants, zones)
         if await handler(ctx):
             return
 

@@ -99,6 +99,22 @@ It understands things like:
 - *"rename group succulents to cacti"* → renames the group
 - *"show all alocasias"* → filtered list, right in the chat
 
+Everything from the **💧 Watering** menu works in plain language too:
+
+- *"create a zone Balcony, every 5 days, remind me at 9am"* → creates it. If
+  you leave out the interval or the reminder time, the agent continues in
+  the regular add-zone dialog with the same buttons
+- *"watered the windowsill"* → logs the watering, next reminder one interval later
+- *"snooze the balcony for 2 days"* → postpones the reminder (1 day if you don't say how long)
+- *"water the balcony every 3 days"* / *"remind me about the windowsill at 8pm"*
+  → changes the interval / reminder time (*"remove the reminder time"* clears it)
+- *"rename zone Balcony to Loggia"* → renames it
+- *"delete zone Balcony"* → asks for confirmation first; plants are never touched
+- *"what needs watering?"* / *"how's the balcony doing?"* → zone overview / one zone's card
+
+If a name matches several zones, the agent asks which one you meant. Times
+you say are in the same local time the buttons show (Minsk, UTC+3).
+
 ## 🖥️ Web admin panel
 
 Sometimes a mouse is just faster. The `admin` service is a small FastAPI +
@@ -156,7 +172,8 @@ bot/
 │   ├── import_.py           # "📥 Import" button — file or text, preview
 │   ├── watering.py          # "💧 Watering" button — zones + reminder buttons
 │   └── ai_agent/            # free-form text → intent → flow (add/delete/
-│                             # delete_group/create_group/rename_group/edit_plant/list)
+│                             # delete_group/create_group/rename_group/edit_plant/list,
+│                             # zone_flow.py — everything watering-related)
 ├── keyboards/
 │   ├── reply.py             # main reply menu
 │   ├── inline.py

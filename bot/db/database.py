@@ -37,6 +37,11 @@ async def _migrate_add_missing_columns(conn) -> None:
     if "notify_time" not in zone_columns:
         await conn.exec_driver_sql("ALTER TABLE watering_zones ADD COLUMN notify_time TIME")
 
+    result = await conn.exec_driver_sql("PRAGMA table_info(ai_logs)")
+    ai_log_columns = {row[1] for row in result.fetchall()}
+    if "zone_name" not in ai_log_columns:
+        await conn.exec_driver_sql("ALTER TABLE ai_logs ADD COLUMN zone_name VARCHAR(100)")
+
 
 @asynccontextmanager
 async def get_session():

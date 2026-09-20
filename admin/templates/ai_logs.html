@@ -49,10 +49,11 @@
               <span class="ai-log-badge {% if log.action == 'unknown' or not log.action %}ai-log-badge--unknown{% endif %}">
                 {{ log.action or "unknown" }}
               </span>
-              {% if log.plant_name or log.group_name or log.comment %}
+              {% if log.plant_name or log.group_name or log.zone_name or log.comment %}
                 <div class="ai-log-meta">
                   {% if log.plant_name %}<span>🌱 {{ log.plant_name }}</span>{% endif %}
                   {% if log.group_name %}<span>📁 {{ log.group_name }}</span>{% endif %}
+                  {% if log.zone_name %}<span>💧 {{ log.zone_name }}</span>{% endif %}
                   {% if log.comment %}<span>💬 {{ log.comment }}</span>{% endif %}
                 </div>
               {% endif %}

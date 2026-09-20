@@ -177,6 +177,14 @@ async def zone_add_name(message: Message, state: FSMContext, user_id: int) -> No
         )
         return
 
+    await ask_interval(message, state, name)
+
+
+async def ask_interval(message: Message, state: FSMContext, name: str) -> None:
+    """Шаг «как часто поливать» диалога создания зоны. Вынесен из
+    zone_add_name, чтобы ИИ-агент мог войти в тот же диалог с уже известным
+    названием (bot/handlers/ai_agent/zone_flow.py) — дальше подхватывают
+    обычные хендлеры ZoneAdd.interval выше."""
     await state.update_data(name=name)
     await state.set_state(ZoneAdd.interval)
     await render(
@@ -191,7 +199,7 @@ async def zone_add_name(message: Message, state: FSMContext, user_id: int) -> No
 async def zone_add_interval_button(callback: CallbackQuery, state: FSMContext) -> None:
     days = int(callback.data.split(":", 1)[1])
     await callback.answer()
-    await _ask_notify_time(callback.message, state, days, edit=True)
+    await ask_notify_time(callback.message, state, days, edit=True)
 
 
 @router.message(StateFilter(ZoneAdd.interval), F.text, ~F.text.in_(MENU_BUTTONS))
@@ -206,10 +214,10 @@ async def zone_add_interval_text(message: Message, state: FSMContext) -> None:
             reply_markup=interval_keyboard("wzint", "wzcancel"),
         )
         return
-    await _ask_notify_time(message, state, days, edit=False)
+    await ask_notify_time(message, state, days, edit=False)
 
 
-async def _ask_notify_time(message: Message, state: FSMContext, days: int, *, edit: bool) -> None:
+async def ask_notify_time(message: Message, state: FSMContext, days: int, *, edit: bool) -> None:
     await state.update_data(interval_days=days)
     await state.set_state(ZoneAdd.notify_time)
     text = (

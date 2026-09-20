@@ -31,6 +31,7 @@ async def create_ai_log(
     group_name: str | None = None,
     comment: str | None = None,
     error: str | None = None,
+    zone_name: str | None = None,
 ) -> AiLog:
     log = AiLog(
         user_id=user_id,
@@ -38,6 +39,7 @@ async def create_ai_log(
         action=action,
         plant_name=plant_name,
         group_name=group_name,
+        zone_name=zone_name,
         comment=comment,
         error=error,
     )
