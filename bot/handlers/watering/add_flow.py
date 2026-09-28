@@ -155,7 +155,8 @@ async def zone_add_notify_time_text(message: Message, state: FSMContext, user_id
             reply_markup=notify_time_keyboard("wztime", "wztskip", "wzcancel"),
         )
         return
-    await _finish_add(message, state, user_id, notify_time, edit=False)
+    # Пользователь вводит локальное время (Минск, UTC+3), в БД храним UTC.
+    await _finish_add(message, state, user_id, watering_service.from_display_time(notify_time), edit=False)
 
 
 async def _finish_add(

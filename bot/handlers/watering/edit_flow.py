@@ -254,6 +254,9 @@ async def zone_edit_notify_time_text(message: Message, state: FSMContext, user_i
         )
         return
 
+    # Пользователь вводит локальное время (Минск, UTC+3), в БД храним UTC.
+    notify_time = watering_service.from_display_time(notify_time)
+
     tracked_id = await pop_tracked(state)
     await state.clear()
     if tracked_id:

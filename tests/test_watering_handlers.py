@@ -219,9 +219,11 @@ async def test_notify_time_can_be_typed_at_creation(app):
     assert "Нужно время в формате" in app.tg.last_visible_text()
     assert await _zones() == []
 
+    # Вводится локальное время (UTC+3): 21:15 -> 18:15 UTC в БД, на экране снова 21:15.
     await app.say("21:15")
     (zone,) = await _zones()
-    assert zone.notify_time == time(21, 15)
+    assert zone.notify_time == time(18, 15)
+    assert "21:15" in app.tg.last_visible_text()
 
 
 async def test_interval_can_be_picked_with_preset_button(app):
@@ -385,8 +387,8 @@ async def test_change_notify_time_by_button_and_by_text(app):
 
     await app.press(f"wztedit:{zone_id}")
     await app.say("18:30")
-    assert "Теперь напоминаю в <b>21:30</b> (Минск, UTC+3)" in app.tg.last_visible_text()
-    assert (await _zones())[0].notify_time == time(18, 30)
+    assert "Теперь напоминаю в <b>18:30</b> (Минск, UTC+3)" in app.tg.last_visible_text()
+    assert (await _zones())[0].notify_time == time(15, 30)
 
     await app.press(f"wztedit:{zone_id}")
     await app.press(f"wztskip:{zone_id}")

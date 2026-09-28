@@ -87,4 +87,4 @@ async def list_ai_log_actions(session: AsyncSession) -> list[str]:
     result = await session.execute(
         select(AiLog.action).where(AiLog.action.is_not(None)).distinct().order_by(AiLog.action)
     )
-    return [row[0] for row in result.all()]
+    return [action for action in result.scalars().all() if action is not None]
