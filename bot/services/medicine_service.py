@@ -6,8 +6,11 @@
 
 import calendar
 import re
+import textwrap
+import zlib
 from datetime import date, datetime, timezone
 from html import escape
+from typing import NamedTuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +21,8 @@ MAX_NAME_LENGTH = 150
 MAX_KIND_LENGTH = 50
 MAX_SUBSTANCE_LENGTH = 150
 MAX_COMMENT_LENGTH = 500
-# Верхняя граница на пользователя: каждый препарат — отдельная кнопка в меню,
-# а у Telegram есть лимит на число кнопок в одной клавиатуре.
+# Верхняя граница на пользователя: в экране удаления каждый препарат — отдельная
+# кнопка, а у Telegram есть лимит на число кнопок в одной клавиатуре.
 MAX_MEDICINES = 90
 
 # За сколько дней до конца срока годности приходит напоминание.
@@ -177,6 +180,136 @@ def button_label(medicine: Medicine, today: date) -> str:
     return label
 
 
+class KindGroup(NamedTuple):
+    """Препараты одного типа (группа в меню аптечки, как группа растений)."""
+
+    token: str
+    name: str
+    medicines: list[Medicine]
+
+
+def kind_token(kind: str) -> str:
+    """Короткий стабильный id типа для callback_data (лимит Telegram — 64
+    байта, а тип может быть длинным русским текстом). Регистр и пробелы по
+    краям не важны: «Фунгицид» и «фунгицид » — один тип."""
+    return format(zlib.crc32(kind.strip().casefold().encode()) & 0xFFFFFFFF, "08x")
+
+
+def group_by_kind(medicines: list[Medicine]) -> list[KindGroup]:
+    """Разбивает препараты по типам. Сначала типы из KIND_PRESETS в их порядке,
+    потом свои — по алфавиту. Внутри группы порядок как на входе (из
+    crud.list_medicines: сначала те, у кого срок раньше)."""
+    buckets: dict[str, KindGroup] = {}
+    for medicine in medicines:
+        token = kind_token(medicine.kind)
+        if token not in buckets:
+            buckets[token] = KindGroup(token, medicine.kind.strip(), [])
+        buckets[token].medicines.append(medicine)
+
+    preset_order = {kind_token(kind): index for index, kind in enumerate(KIND_PRESETS)}
+    return sorted(
+        buckets.values(),
+        key=lambda g: (preset_order.get(g.token, len(KIND_PRESETS)), g.name.casefold()),
+    )
+
+
+def find_group(groups: list[KindGroup], token: str) -> KindGroup | None:
+    return next((g for g in groups if g.token == token), None)
+
+
+# Колонки таблицы: (заголовок, ширина в символах). Длинный текст переносится
+# внутри ячейки на следующую строку, поэтому ничего не обрезается.
+_TABLE_COLUMNS = (("Название", 14), ("Вещество", 12), ("Срок", 10), ("Комментарий", 16))
+_TABLE_PAGE_LIMIT = 3800  # запас относительно лимита Telegram в 4096 символов
+
+
+def _wrap_cell(value: str, width: int) -> list[str]:
+    return textwrap.wrap(value, width, break_long_words=True, break_on_hyphens=False) or [""]
+
+
+def _row_cells(medicine: Medicine) -> list[str]:
+    expiry = format_expiry(medicine.expires_at) if medicine.expires_at else "—"
+    return [medicine.name, medicine.active_substance or "—", expiry, medicine.comment or "—"]
+
+
+def _render_table(medicines: list[Medicine], today: date) -> str:
+    """Моноширинная таблица (<pre>) со всеми полями препарата. Значок срока
+    (⛔/⚠️) стоит за правым краем таблицы — эмодзи шире обычного символа и
+    сбивали бы выравнивание колонок, будь они внутри ячейки."""
+    widths = [w for _, w in _TABLE_COLUMNS]
+    header = " │ ".join(title.ljust(w) for title, w in _TABLE_COLUMNS)
+    rule = "─┼─".join("─" * w for w in widths)
+
+    rows: list[tuple[list[list[str]], str]] = []
+    for medicine in medicines:
+        cells = [_wrap_cell(value, w) for value, w in zip(_row_cells(medicine), widths, strict=True)]
+        mark = ""
+        if is_expired(medicine, today):
+            mark = " ⛔"
+        elif is_expiring_soon(medicine, today):
+            mark = " ⚠️"
+        rows.append((cells, mark))
+
+    spaced = any(max(len(c) for c in cells) > 1 for cells, _ in rows)
+    lines = [header, rule]
+    for index, (cells, mark) in enumerate(rows):
+        height = max(len(c) for c in cells)
+        for i in range(height):
+            parts = [(c[i] if i < len(c) else "").ljust(w) for c, w in zip(cells, widths, strict=True)]
+            line = " │ ".join(parts)
+            lines.append(line + mark if i == 0 and mark else line.rstrip())
+        if spaced and index < len(rows) - 1:
+            lines.append(rule)
+    return f"<pre>{escape(chr(10).join(lines))}</pre>"
+
+
+def _legend(medicines: list[Medicine], today: date) -> str:
+    parts = []
+    if any(is_expired(m, today) for m in medicines):
+        parts.append("⛔ срок вышел")
+    if any(is_expiring_soon(m, today) for m in medicines):
+        parts.append("⚠️ скоро закончится срок")
+    return "\n" + "   ".join(parts) if parts else ""
+
+
+def render_group_pages(group: KindGroup, today: date, header: str | None = None) -> list[str]:
+    """Страницы с таблицей одного типа. Строки не разрываются между
+    страницами, а каждая страница — отдельная законченная <pre>-таблица
+    (резать готовый HTML по строкам нельзя: теги разъедутся). header —
+    необязательная шапка над названием типа (в режиме «Показать все»)."""
+    title = f"<b>{escape(group.name)} ({len(group.medicines)})</b>"
+    prefix = f"{header}\n\n{title}" if header else title
+
+    pages: list[str] = []
+    chunk: list[Medicine] = []
+    for medicine in group.medicines:
+        candidate = [*chunk, medicine]
+        text = f"{prefix}\n{_render_table(candidate, today)}{_legend(candidate, today)}"
+        if chunk and len(text) > _TABLE_PAGE_LIMIT:
+            pages.append(f"{prefix}\n{_render_table(chunk, today)}{_legend(chunk, today)}")
+            chunk = [medicine]
+        else:
+            chunk = candidate
+    pages.append(f"{prefix}\n{_render_table(chunk, today)}{_legend(chunk, today)}")
+    return pages
+
+
+def render_all_pages(medicines: list[Medicine], today: date) -> list[str]:
+    """«Показать все»: каждый тип — своя таблица на своей странице."""
+    if not medicines:
+        return [render_overview(medicines, today)]
+    header = f"🧪 <b>Вся аптечка ({len(medicines)})</b>"
+    pages: list[str] = []
+    for group in group_by_kind(medicines):
+        pages.extend(render_group_pages(group, today, header))
+    return pages
+
+
+def render_pick_text(group_name: str | None) -> str:
+    where = f" из типа «{escape(group_name)}»" if group_name else ""
+    return f"🗑 Какой препарат{where} удалить?"
+
+
 def render_overview(medicines: list[Medicine], today: date) -> str:
     if not medicines:
         return (
@@ -192,6 +325,7 @@ def render_overview(medicines: list[Medicine], today: date) -> str:
         lines.append(f"⛔ Срок вышел: {expired}")
     if soon:
         lines.append(f"⚠️ Скоро закончится срок: {soon}")
+    lines.append("\nВыбери тип:")
     return "\n".join(lines)
 
 

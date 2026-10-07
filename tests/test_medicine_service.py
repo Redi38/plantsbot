@@ -133,3 +133,94 @@ async def test_card_hides_empty_optional_fields(session, user_id):
     assert "Действующее вещество: тиаметоксам" in full_card
     assert "Срок годности: до 05.2027" in full_card
     assert "Комментарий: от трипсов" in full_card
+
+
+async def _fill(session, user_id):
+    await ms.add_medicine(session, user_id, "Актара", "Инсектицид", "тиаметоксам", date(2026, 10, 31), "от тли")
+    await ms.add_medicine(session, user_id, "Фитоверм", "Инсектицид")
+    await ms.add_medicine(session, user_id, "Топаз", "Фунгицид", "пенконазол", date(2026, 9, 30))
+    await ms.add_medicine(session, user_id, "Фундазол", "фунгицид ")  # тот же тип, другой регистр
+    await ms.add_medicine(session, user_id, "Свой", "Раствор для полива")
+    return await crud.list_medicines(session, user_id)
+
+
+def test_kind_token_ignores_case_and_edge_spaces():
+    assert ms.kind_token("Фунгицид") == ms.kind_token(" фунгицид ")
+    assert ms.kind_token("Фунгицид") != ms.kind_token("Инсектицид")
+    assert len(ms.kind_token("Очень длинный свой тип " * 2)) == 8  # влезает в callback_data
+
+
+async def test_group_by_kind_presets_first_then_custom(session, user_id):
+    groups = ms.group_by_kind(await _fill(session, user_id))
+
+    assert [(g.name, len(g.medicines)) for g in groups] == [("Инсектицид", 2), ("Фунгицид", 2), ("Раствор для полива", 1)]
+    assert ms.find_group(groups, ms.kind_token("ФУНГИЦИД")) is groups[1]
+    assert ms.find_group(groups, "deadbeef") is None
+
+
+async def test_group_table_shows_all_fields(session, user_id):
+    groups = ms.group_by_kind(await _fill(session, user_id))
+
+    (page,) = ms.render_group_pages(groups[0], TODAY)
+
+    assert "<b>Инсектицид (2)</b>" in page
+    for header in ("Название", "Вещество", "Срок", "Комментарий"):
+        assert header in page
+    assert "Актара" in page
+    assert "тиаметоксам" in page
+    assert "10.2026" in page
+    assert "от тли" in page
+    assert "Фитоверм" in page
+    assert "⚠️" in page  # Актара: срок меньше 30 дней
+    assert "Фунгицид" not in page  # другие типы в таблицу не попадают
+
+
+async def test_table_escapes_html_and_wraps_long_cells(session, user_id):
+    await ms.add_medicine(session, user_id, "<b>Хитрый</b>", "Фунгицид", comment="очень длинный комментарий " * 6)
+    (group,) = ms.group_by_kind(await crud.list_medicines(session, user_id))
+
+    (page,) = ms.render_group_pages(group, TODAY)
+
+    assert "&lt;b&gt;Хитрый&lt;/b&gt;" in page
+    assert "<b>Хитрый</b>" not in page
+    assert page.count("комментарий") == 6  # перенос строк, ничего не обрезано
+
+
+async def test_expired_marker_and_legend(session, user_id):
+    groups = ms.group_by_kind(await _fill(session, user_id))
+
+    (page,) = ms.render_group_pages(groups[1], TODAY)
+
+    assert "⛔" in page
+    assert "⛔ срок вышел" in page
+    assert "скоро закончится" not in page
+
+
+async def test_render_all_pages_one_table_per_kind(session, user_id):
+    pages = ms.render_all_pages(await _fill(session, user_id), TODAY)
+
+    assert len(pages) == 3
+    assert all("Вся аптечка (5)" in p for p in pages)
+    assert "Актара" in pages[0] and "Топаз" not in pages[0]
+    assert "Топаз" in pages[1]
+    assert "Свой" in pages[2]
+
+
+async def test_big_group_is_split_into_valid_pages(session, user_id):
+    for i in range(40):
+        await ms.add_medicine(
+            session, user_id, f"Препарат{i}", "Инсектицид", "вещество", date(2027, 5, 31), "комментарий " * 5
+        )
+    (group,) = ms.group_by_kind(await crud.list_medicines(session, user_id))
+
+    pages = ms.render_group_pages(group, TODAY)
+
+    assert len(pages) > 1
+    assert all(len(p) <= 4096 for p in pages)
+    assert all(p.count("<pre>") == 1 and p.count("</pre>") == 1 for p in pages)  # теги не разорваны
+    joined = "\n".join(pages)
+    assert all(f"Препарат{i} " in joined or f"Препарат{i}\n" in joined for i in range(40))
+
+
+def test_overview_of_empty_cabinet_has_no_table():
+    assert "Пока пусто" in ms.render_all_pages([], TODAY)[0]

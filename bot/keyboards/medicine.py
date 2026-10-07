@@ -1,8 +1,11 @@
 """Клавиатуры аптечки. Формат callback_data (префикс med — чтобы не
 пересекаться с остальными модулями):
 
+  mg:{token}        — таблица препаратов одного типа (token — kind_token) или mg:all — все
+  medpage:{token}:{n} — страница n таблицы (пагинация)
+  medpick:{token}   — выбрать препарат для удаления из таблицы token
   med:{id}          — открыть карточку препарата
-  medmenu           — назад к списку препаратов
+  medmenu           — назад к меню типов
   medadd / medcancel — начать / отменить добавление
   medkind:{i}       — выбор типа из KIND_PRESETS при добавлении
   medskip           — пропустить необязательный шаг (вещество / срок / комментарий)
@@ -17,15 +20,47 @@ from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.db.models import Medicine
-from bot.services.medicine_service import KIND_PRESETS, button_label
+from bot.keyboards.inline import add_pagination_buttons
+from bot.services.medicine_service import KIND_PRESETS, KindGroup, button_label
 
 
-def medicines_menu_keyboard(medicines: list[Medicine], today: date) -> InlineKeyboardMarkup:
+def medicines_menu_keyboard(groups: list[KindGroup]) -> InlineKeyboardMarkup:
+    """Меню аптечки устроено как меню групп растений: кнопка на каждый тип
+    (с числом препаратов) и «Показать все»."""
     builder = InlineKeyboardBuilder()
     builder.button(text="➕ Добавить препарат", callback_data="medadd", style="success")
-    for medicine in medicines:
-        builder.button(text=button_label(medicine, today), callback_data=f"med:{medicine.id}", style="primary")
+    total = 0
+    for group in groups:
+        total += len(group.medicines)
+        builder.button(text=f"{group.name} ({len(group.medicines)})", callback_data=f"mg:{group.token}")
+    if groups:
+        builder.button(text=f"📋 Показать все ({total})", callback_data="mg:all", style="primary")
     builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def medicine_pages_keyboard(token: str, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Кнопки под таблицей типа (или всех препаратов): пагинация, добавить /
+    удалить, назад в меню типов."""
+    builder = InlineKeyboardBuilder()
+    row_sizes = []
+    pagination_size = add_pagination_buttons(builder, page, total_pages, lambda p: f"medpage:{token}:{p}")
+    if pagination_size:
+        row_sizes.append(pagination_size)
+    builder.button(text="➕ Добавить", callback_data="medadd", style="success")
+    builder.button(text="🗑 Удалить", callback_data=f"medpick:{token}", style="danger")
+    builder.button(text="⬅️ Назад", callback_data="medmenu", style="primary")
+    builder.adjust(*row_sizes, 2, 1)
+    return builder.as_markup()
+
+
+def medicine_pick_keyboard(medicines: list[Medicine], today: date, token: str) -> InlineKeyboardMarkup:
+    """Выбор препарата для удаления: кнопка на препарат, назад — к таблице."""
+    builder = InlineKeyboardBuilder()
+    for medicine in medicines:
+        builder.button(text=button_label(medicine, today), callback_data=f"meddel:{medicine.id}", style="danger")
+    builder.button(text="⬅️ Назад", callback_data=f"mg:{token}", style="primary")
     builder.adjust(1)
     return builder.as_markup()
 

@@ -5,6 +5,7 @@ from datetime import date
 
 from bot.db import crud, database
 from bot.keyboards.reply import BTN_MEDS
+from bot.services import medicine_service
 from tests.test_watering_handlers import TG_ID, app
 
 
@@ -145,3 +146,86 @@ async def test_menu_button_during_dialog_does_not_become_a_field_value(app):  # 
 
     assert "Пока пусто" in app.tg.last_visible_text()
     assert await _medicines() == []
+
+
+async def _add(name, kind, substance=None, expires=None, comment=None):
+    async with database.get_session() as session:
+        user = await crud.get_or_create_user(session, TG_ID, None, None)
+        return await medicine_service.add_medicine(session, user.id, name, kind, substance, expires, comment)
+
+
+async def test_menu_lists_kinds_with_counts_and_show_all(app):  # noqa: F811
+    await _add("Актара", "Инсектицид")
+    await _add("Фитоверм", "Инсектицид")
+    await _add("Топаз", "Фунгицид")
+
+    await app.say(BTN_MEDS)
+
+    callbacks = app.tg.last_markup_callbacks()
+    assert medicine_service.kind_token("Инсектицид") in "".join(callbacks)
+    assert "mg:all" in callbacks
+    assert not any(c.startswith("med:") for c in callbacks)  # препараты больше не кнопки
+    assert "Выбери тип" in app.tg.last_visible_text()
+
+
+async def test_kind_button_opens_table_with_all_fields(app):  # noqa: F811
+    await _add("Актара", "Инсектицид", "тиаметоксам", date(2099, 5, 31), "от тли")
+    await _add("Топаз", "Фунгицид")
+
+    await app.say(BTN_MEDS)
+    await app.press(f"mg:{medicine_service.kind_token('Инсектицид')}")
+
+    text = app.tg.last_visible_text()
+    assert "Инсектицид (1)" in text
+    assert "Актара" in text and "тиаметоксам" in text and "05.2099" in text and "от тли" in text
+    assert "Топаз" not in text
+    callbacks = app.tg.last_markup_callbacks()
+    assert "medadd" in callbacks and "medmenu" in callbacks
+
+
+async def test_show_all_pages_through_every_kind(app):  # noqa: F811
+    await _add("Актара", "Инсектицид")
+    await _add("Топаз", "Фунгицид")
+
+    await app.say(BTN_MEDS)
+    await app.press("mg:all")
+    assert "Вся аптечка (2)" in app.tg.last_visible_text()
+    assert "Актара" in app.tg.last_visible_text()
+    assert "medpage:all:2" in app.tg.last_markup_callbacks()
+
+    await app.press("medpage:all:2")
+    assert "Топаз" in app.tg.last_visible_text()
+    assert "Актара" not in app.tg.last_visible_text()
+
+    await app.press("medmenu")
+    assert "Выбери тип" in app.tg.last_visible_text()
+
+
+async def test_delete_from_table_via_pick_screen(app):  # noqa: F811
+    medicine = await _add("Актара", "Инсектицид")
+    await _add("Топаз", "Фунгицид")
+    token = medicine_service.kind_token("Инсектицид")
+
+    await app.say(BTN_MEDS)
+    await app.press(f"mg:{token}")
+    await app.press(f"medpick:{token}")
+    assert "Какой препарат" in app.tg.last_visible_text()
+    assert app.tg.last_markup_callbacks().count(f"meddel:{medicine.id}") == 1
+
+    await app.press(f"meddel:{medicine.id}")
+    await app.press(f"meddelc:{medicine.id}")
+
+    assert [m.name for m in await _medicines()] == ["Топаз"]
+    assert "Выбери тип" in app.tg.last_visible_text()  # вернулись в меню типов
+
+
+async def test_stale_kind_button_returns_to_menu(app):  # noqa: F811
+    medicine = await _add("Актара", "Инсектицид")
+    token = medicine_service.kind_token("Инсектицид")
+    await app.say(BTN_MEDS)
+    await app.press(f"meddel:{medicine.id}")
+    await app.press(f"meddelc:{medicine.id}")
+
+    await app.press(f"mg:{token}")  # кнопка со старого сообщения
+
+    assert "уже пуст или удалён" in app.tg.last_visible_text()
