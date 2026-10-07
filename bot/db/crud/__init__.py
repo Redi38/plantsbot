@@ -4,6 +4,7 @@
   groups.py   — Group: создание/поиск/переименование/удаление/перенос растений
   plants.py   — Plant: создание/поиск/обновление/удаление
   ai_logs.py  — AiLog: запись и чтение логов ИИ-агента
+  medicines.py — Medicine: аптечка для растений и поиск препаратов с подходящим к концу сроком
   watering.py — WateringZone: зоны полива и поиск тех, про кого пора напомнить
 
 Снаружи используется так же, как раньше использовался модуль crud.py —
@@ -30,6 +31,14 @@ from .groups import (
     list_groups,
     move_group_plants,
     rename_group,
+)
+from .medicines import (
+    count_medicines,
+    create_medicine,
+    delete_medicine,
+    get_medicine,
+    list_due_medicines,
+    list_medicines,
 )
 from .plants import (
     create_plant,
@@ -61,12 +70,15 @@ from .watering import (
 __all__ = [
     "clear_user_plants",
     "count_ai_logs_all",
+    "count_medicines",
     "create_ai_log",
     "create_group",
+    "create_medicine",
     "create_plant",
     "create_zone",
     "delete_group",
     "delete_group_with_plants",
+    "delete_medicine",
     "delete_plant",
     "delete_zone",
     "find_groups_fuzzy",
@@ -76,6 +88,7 @@ __all__ = [
     "get_group",
     "get_group_by_name",
     "get_last_activity_map",
+    "get_medicine",
     "get_or_create_group",
     "get_or_create_user",
     "get_plant",
@@ -86,8 +99,10 @@ __all__ = [
     "list_ai_logs_all",
     "list_ai_logs_for_user",
     "list_all_zones",
+    "list_due_medicines",
     "list_due_zones",
     "list_groups",
+    "list_medicines",
     "list_users",
     "list_zones",
     "move_group_plants",

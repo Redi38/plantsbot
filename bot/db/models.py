@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import BigInteger, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -22,6 +22,7 @@ class User(Base):
     groups: Mapped[list["Group"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     plants: Mapped[list["Plant"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     zones: Mapped[list["WateringZone"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    medicines: Mapped[list["Medicine"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     @property
     def display_name(self) -> str:
@@ -123,3 +124,32 @@ class WateringZone(Base):
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     user: Mapped["User"] = relationship(back_populates="zones")
+
+
+class Medicine(Base):
+    """Препарат в аптечке для растений (средство от вредителей/болезней, удобрение и т.п.).
+
+    Обязательны только name и kind (тип: инсектицид, фунгицид, удобрение и т.п.).
+    active_substance, expires_at и comment — по желанию.
+
+    expires_at — последний день срока годности. Если пользователь ввёл
+    только месяц и год (как на упаковке, «05.2027»), храним последний день
+    этого месяца: препарат годен до конца месяца.
+
+    notified_at — когда отправили напоминание «срок годности скоро
+    закончится» (за 30 дней до expires_at). Напоминание одноразовое: пока
+    notified_at задан, повторно не шлём."""
+
+    __tablename__ = "medicines"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(150))
+    kind: Mapped[str] = mapped_column(String(50))
+    active_substance: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    expires_at: Mapped[date | None] = mapped_column(nullable=True, index=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
+
+    user: Mapped["User"] = relationship(back_populates="medicines")

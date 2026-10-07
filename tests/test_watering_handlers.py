@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 
 from bot.db import crud, database
 from bot.db.models import Base
-from bot.handlers import ai_agent, groups, import_, list_view, plants, watering
+from bot.handlers import ai_agent, groups, import_, list_view, medicine, plants, watering
 from bot.keyboards.reply import BTN_LIST, BTN_WATER
 from bot.middlewares.user import UserMiddleware
 from bot.services import watering_service as ws
@@ -119,7 +119,15 @@ class Harness:
         )
 
 
-_ROUTERS = (list_view.router, plants.router, groups.router, import_.router, watering.router, ai_agent.router)
+_ROUTERS = (
+    list_view.router,
+    plants.router,
+    groups.router,
+    import_.router,
+    watering.router,
+    medicine.router,
+    ai_agent.router,
+)
 
 
 @pytest.fixture(scope="module")
