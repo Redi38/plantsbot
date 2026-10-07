@@ -1,7 +1,7 @@
 """Клавиатуры аптечки. Формат callback_data (префикс med — чтобы не
 пересекаться с остальными модулями):
 
-  mg:{token}        — таблица препаратов одного типа (token — kind_token) или mg:all — все
+  mg:{token}        — таблица препаратов одного типа (token — kind_token) или mg:all — главный экран с общей таблицей
   medpage:{token}:{n} — страница n таблицы (пагинация)
   medpick:{token}   — выбрать препарат для удаления из таблицы token
   med:{id}          — открыть карточку препарата
@@ -24,19 +24,23 @@ from bot.keyboards.inline import add_pagination_buttons
 from bot.services.medicine_service import KIND_PRESETS, KindGroup, button_label
 
 
-def medicines_menu_keyboard(groups: list[KindGroup]) -> InlineKeyboardMarkup:
-    """Меню аптечки устроено как меню групп растений: кнопка на каждый тип
-    (с числом препаратов) и «Показать все»."""
+def medicines_menu_keyboard(groups: list[KindGroup], page: int = 1, total_pages: int = 1) -> InlineKeyboardMarkup:
+    """Главный экран аптечки: под общей таблицей — пагинация (если страниц
+    несколько), кнопка на каждый тип (с числом препаратов), под ними в
+    одном ряду «Добавить препарат» и «Удалить», затем «Назад»."""
     builder = InlineKeyboardBuilder()
-    builder.button(text="➕ Добавить препарат", callback_data="medadd", style="success")
-    total = 0
+    row_sizes = []
+    pagination_size = add_pagination_buttons(builder, page, total_pages, lambda p: f"medpage:all:{p}")
+    if pagination_size:
+        row_sizes.append(pagination_size)
     for group in groups:
-        total += len(group.medicines)
         builder.button(text=f"{group.name} ({len(group.medicines)})", callback_data=f"mg:{group.token}")
+    builder.button(text="➕ Добавить препарат", callback_data="medadd", style="success")
     if groups:
-        builder.button(text=f"📋 Показать все ({total})", callback_data="mg:all", style="primary")
+        builder.button(text="🗑 Удалить", callback_data="medpick:all", style="danger")
     builder.button(text="⬅️ Назад", callback_data="closemsg", style="primary")
-    builder.adjust(1)
+    # типы — по одной кнопке в ряд, «Добавить» и «Удалить» — на одном уровне под ними
+    builder.adjust(*row_sizes, *([1] * len(groups)), 2 if groups else 1, 1)
     return builder.as_markup()
 
 

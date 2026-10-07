@@ -17,14 +17,24 @@ from bot.utils.chat import safe_edit_text
 NOT_FOUND = "⚠️ Препарат не найден, возможно уже удалён."
 
 
-async def menu_view(user_id: int, notice: str | None = None) -> tuple[str, InlineKeyboardMarkup]:
+async def menu_view(
+    user_id: int, notice: str | None = None, page: int = 1
+) -> tuple[str, InlineKeyboardMarkup]:
+    """Главный экран аптечки: общая таблица всех препаратов, под ней кнопки
+    типов и «Добавить препарат». Если аптечка пуста — короткое приветствие."""
     today = medicine_service.today_utc()
     async with get_session() as session:
         medicines = await crud.list_medicines(session, user_id)
-    text = medicine_service.render_overview(medicines, today)
+    groups = medicine_service.group_by_kind(medicines)
+    if medicines:
+        pages = medicine_service.render_all_pages(medicines, today)
+        page = max(1, min(page, len(pages)))
+        text, total_pages = pages[page - 1], len(pages)
+    else:
+        text, page, total_pages = medicine_service.render_overview(medicines, today), 1, 1
     if notice:
         text = f"{notice}\n\n{text}"
-    return text, medicines_menu_keyboard(medicine_service.group_by_kind(medicines))
+    return text, medicines_menu_keyboard(groups, page, total_pages)
 
 
 async def _pages_for(user_id: int, token: str) -> list[str] | None:
@@ -40,6 +50,8 @@ async def _pages_for(user_id: int, token: str) -> list[str] | None:
 
 
 async def table_view(user_id: int, token: str, page: int = 1) -> tuple[str, InlineKeyboardMarkup] | None:
+    if token == "all":
+        return await menu_view(user_id, page=page)
     pages = await _pages_for(user_id, token)
     if pages is None:
         return None

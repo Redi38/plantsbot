@@ -6,7 +6,6 @@
 
 import calendar
 import re
-import textwrap
 import zlib
 from datetime import date, datetime, timezone
 from html import escape
@@ -217,50 +216,37 @@ def find_group(groups: list[KindGroup], token: str) -> KindGroup | None:
     return next((g for g in groups if g.token == token), None)
 
 
-# Колонки таблицы: (заголовок, ширина в символах). Длинный текст переносится
-# внутри ячейки на следующую строку, поэтому ничего не обрезается.
-_TABLE_COLUMNS = (("Название", 14), ("Вещество", 12), ("Срок", 10), ("Комментарий", 16))
-_TABLE_PAGE_LIMIT = 3800  # запас относительно лимита Telegram в 4096 символов
+_PAGE_LIMIT = 3800  # запас относительно лимита Telegram в 4096 символов
 
 
-def _wrap_cell(value: str, width: int) -> list[str]:
-    return textwrap.wrap(value, width, break_long_words=True, break_on_hyphens=False) or [""]
+def _mark(medicine: Medicine, today: date) -> str:
+    if is_expired(medicine, today):
+        return " ⛔"
+    if is_expiring_soon(medicine, today):
+        return " ⚠️"
+    return ""
 
 
-def _row_cells(medicine: Medicine) -> list[str]:
-    expiry = format_expiry(medicine.expires_at) if medicine.expires_at else "—"
-    return [medicine.name, medicine.active_substance or "—", expiry, medicine.comment or "—"]
+def _render_entry(medicine: Medicine, today: date, with_kind: bool = False) -> str:
+    """Один препарат — небольшой блок обычного текста. Настоящих таблиц в
+    Telegram нет, а моноширинная (<pre>) на телефоне ломается и уезжает за
+    край экрана, поэтому поля идут строками друг под другом и сами
+    переносятся по ширине экрана. Пустые поля не показываем."""
+    title = f"<b>{escape(medicine.name)}</b>"
+    if with_kind:
+        title += f" · {escape(medicine.kind.strip())}"
+    lines = [f"{title}{_mark(medicine, today)}"]
+    if medicine.active_substance:
+        lines.append(f"Вещество: {escape(medicine.active_substance)}")
+    if medicine.expires_at:
+        lines.append(f"Срок: {format_expiry(medicine.expires_at)}")
+    if medicine.comment:
+        lines.append(f"Комментарий: {escape(medicine.comment)}")
+    return "\n".join(lines)
 
 
-def _render_table(medicines: list[Medicine], today: date) -> str:
-    """Моноширинная таблица (<pre>) со всеми полями препарата. Значок срока
-    (⛔/⚠️) стоит за правым краем таблицы — эмодзи шире обычного символа и
-    сбивали бы выравнивание колонок, будь они внутри ячейки."""
-    widths = [w for _, w in _TABLE_COLUMNS]
-    header = " │ ".join(title.ljust(w) for title, w in _TABLE_COLUMNS)
-    rule = "─┼─".join("─" * w for w in widths)
-
-    rows: list[tuple[list[list[str]], str]] = []
-    for medicine in medicines:
-        cells = [_wrap_cell(value, w) for value, w in zip(_row_cells(medicine), widths, strict=True)]
-        mark = ""
-        if is_expired(medicine, today):
-            mark = " ⛔"
-        elif is_expiring_soon(medicine, today):
-            mark = " ⚠️"
-        rows.append((cells, mark))
-
-    spaced = any(max(len(c) for c in cells) > 1 for cells, _ in rows)
-    lines = [header, rule]
-    for index, (cells, mark) in enumerate(rows):
-        height = max(len(c) for c in cells)
-        for i in range(height):
-            parts = [(c[i] if i < len(c) else "").ljust(w) for c, w in zip(cells, widths, strict=True)]
-            line = " │ ".join(parts)
-            lines.append(line + mark if i == 0 and mark else line.rstrip())
-        if spaced and index < len(rows) - 1:
-            lines.append(rule)
-    return f"<pre>{escape(chr(10).join(lines))}</pre>"
+def _render_entries(medicines: list[Medicine], today: date, with_kind: bool = False) -> str:
+    return "\n\n".join(_render_entry(m, today, with_kind) for m in medicines)
 
 
 def _legend(medicines: list[Medicine], today: date) -> str:
@@ -272,37 +258,39 @@ def _legend(medicines: list[Medicine], today: date) -> str:
     return "\n" + "   ".join(parts) if parts else ""
 
 
-def render_group_pages(group: KindGroup, today: date, header: str | None = None) -> list[str]:
-    """Страницы с таблицей одного типа. Строки не разрываются между
-    страницами, а каждая страница — отдельная законченная <pre>-таблица
-    (резать готовый HTML по строкам нельзя: теги разъедутся). header —
-    необязательная шапка над названием типа (в режиме «Показать все»)."""
-    title = f"<b>{escape(group.name)} ({len(group.medicines)})</b>"
-    prefix = f"{header}\n\n{title}" if header else title
+def _paginate(prefix: str, medicines: list[Medicine], today: date, with_kind: bool = False) -> list[str]:
+    """Режет список препаратов на страницы так, чтобы каждая влезала в лимит
+    Telegram; препарат целиком остаётся на одной странице."""
+
+    def page(chunk: list[Medicine]) -> str:
+        return f"{prefix}\n\n{_render_entries(chunk, today, with_kind)}{_legend(chunk, today)}"
 
     pages: list[str] = []
     chunk: list[Medicine] = []
-    for medicine in group.medicines:
+    for medicine in medicines:
         candidate = [*chunk, medicine]
-        text = f"{prefix}\n{_render_table(candidate, today)}{_legend(candidate, today)}"
-        if chunk and len(text) > _TABLE_PAGE_LIMIT:
-            pages.append(f"{prefix}\n{_render_table(chunk, today)}{_legend(chunk, today)}")
+        if chunk and len(page(candidate)) > _PAGE_LIMIT:
+            pages.append(page(chunk))
             chunk = [medicine]
         else:
             chunk = candidate
-    pages.append(f"{prefix}\n{_render_table(chunk, today)}{_legend(chunk, today)}")
+    pages.append(page(chunk))
     return pages
+
+
+def render_group_pages(group: KindGroup, today: date) -> list[str]:
+    """Страницы с препаратами одного типа."""
+    return _paginate(f"<b>{escape(group.name)} ({len(group.medicines)})</b>", group.medicines, today)
 
 
 def render_all_pages(medicines: list[Medicine], today: date) -> list[str]:
-    """«Показать все»: каждый тип — своя таблица на своей странице."""
+    """Общий список аптечки: все препараты вместе, у каждого указан тип
+    (порядок — по типам, как в меню). Если не влезает в лимит Telegram,
+    делится на страницы."""
     if not medicines:
         return [render_overview(medicines, today)]
-    header = f"🧪 <b>Вся аптечка ({len(medicines)})</b>"
-    pages: list[str] = []
-    for group in group_by_kind(medicines):
-        pages.extend(render_group_pages(group, today, header))
-    return pages
+    ordered = [m for group in group_by_kind(medicines) for m in group.medicines]
+    return _paginate(f"🧪 <b>Вся аптечка ({len(ordered)})</b>", ordered, today, with_kind=True)
 
 
 def render_pick_text(group_name: str | None) -> str:

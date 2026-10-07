@@ -158,14 +158,15 @@ async def test_group_by_kind_presets_first_then_custom(session, user_id):
     assert ms.find_group(groups, "deadbeef") is None
 
 
-async def test_group_table_shows_all_fields(session, user_id):
+async def test_group_list_shows_all_fields(session, user_id):
     groups = ms.group_by_kind(await _fill(session, user_id))
 
     (page,) = ms.render_group_pages(groups[0], TODAY)
 
     assert "<b>Инсектицид (2)</b>" in page
-    for header in ("Название", "Вещество", "Срок", "Комментарий"):
-        assert header in page
+    for label in ("Вещество:", "Срок:", "Комментарий:"):
+        assert label in page
+    assert "<pre>" not in page  # обычный текст, не моноширинный код
     assert "Актара" in page
     assert "тиаметоксам" in page
     assert "10.2026" in page
@@ -196,14 +197,29 @@ async def test_expired_marker_and_legend(session, user_id):
     assert "скоро закончится" not in page
 
 
-async def test_render_all_pages_one_table_per_kind(session, user_id):
+async def test_render_all_pages_is_one_general_page_when_it_fits(session, user_id):
     pages = ms.render_all_pages(await _fill(session, user_id), TODAY)
 
-    assert len(pages) == 3
-    assert all("Вся аптечка (5)" in p for p in pages)
-    assert "Актара" in pages[0] and "Топаз" not in pages[0]
-    assert "Топаз" in pages[1]
-    assert "Свой" in pages[2]
+    assert len(pages) == 1
+    assert "Вся аптечка (5)" in pages[0]
+    assert all(name in pages[0] for name in ("Актара", "Топаз", "Свой"))
+    assert "<pre>" not in pages[0]
+    assert "Актара</b> · Инсектицид" in pages[0] and "Топаз</b> · Фунгицид" in pages[0]  # тип у каждого препарата
+
+
+async def test_render_all_pages_splits_into_valid_pages(session, user_id):
+    for i in range(40):
+        await ms.add_medicine(
+            session, user_id, f"Препарат{i}", "Инсектицид", "вещество", date(2027, 5, 31), "комментарий " * 5
+        )
+    await ms.add_medicine(session, user_id, "Топаз", "Фунгицид")
+
+    pages = ms.render_all_pages(await crud.list_medicines(session, user_id), TODAY)
+
+    assert len(pages) > 1
+    assert all(len(p) <= 4096 for p in pages)
+    assert all("Вся аптечка (41)" in p for p in pages)
+    assert "Топаз" in pages[-1]
 
 
 async def test_big_group_is_split_into_valid_pages(session, user_id):
@@ -217,9 +233,9 @@ async def test_big_group_is_split_into_valid_pages(session, user_id):
 
     assert len(pages) > 1
     assert all(len(p) <= 4096 for p in pages)
-    assert all(p.count("<pre>") == 1 and p.count("</pre>") == 1 for p in pages)  # теги не разорваны
+    assert all(p.count("<b>") == p.count("</b>") for p in pages)  # теги не разорваны
     joined = "\n".join(pages)
-    assert all(f"Препарат{i} " in joined or f"Препарат{i}\n" in joined for i in range(40))
+    assert all(f"<b>Препарат{i}</b>" in joined for i in range(40))
 
 
 def test_overview_of_empty_cabinet_has_no_table():

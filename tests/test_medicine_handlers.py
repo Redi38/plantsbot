@@ -154,7 +154,7 @@ async def _add(name, kind, substance=None, expires=None, comment=None):
         return await medicine_service.add_medicine(session, user.id, name, kind, substance, expires, comment)
 
 
-async def test_menu_lists_kinds_with_counts_and_show_all(app):  # noqa: F811
+async def test_menu_shows_general_list_with_kind_buttons_and_add_below(app):  # noqa: F811
     await _add("Актара", "Инсектицид")
     await _add("Фитоверм", "Инсектицид")
     await _add("Топаз", "Фунгицид")
@@ -163,9 +163,15 @@ async def test_menu_lists_kinds_with_counts_and_show_all(app):  # noqa: F811
 
     callbacks = app.tg.last_markup_callbacks()
     assert medicine_service.kind_token("Инсектицид") in "".join(callbacks)
-    assert "mg:all" in callbacks
+    assert "mg:all" not in callbacks  # кнопки «Показать все» больше нет
     assert not any(c.startswith("med:") for c in callbacks)  # препараты больше не кнопки
-    assert "Выбери тип" in app.tg.last_visible_text()
+    # общая таблица со всеми типами сразу на главном экране
+    text = app.tg.last_visible_text()
+    assert "Вся аптечка (3)" in text
+    assert "Актара" in text and "Фитоверм" in text and "Топаз" in text
+    assert "<pre>" not in text  # обычный текст, а не моноширинный код
+    # «Добавить» стоит под кнопками всех типов
+    assert callbacks.index("medadd") > max(i for i, c in enumerate(callbacks) if c.startswith("mg:"))
 
 
 async def test_kind_button_opens_table_with_all_fields(app):  # noqa: F811
@@ -183,22 +189,18 @@ async def test_kind_button_opens_table_with_all_fields(app):  # noqa: F811
     assert "medadd" in callbacks and "medmenu" in callbacks
 
 
-async def test_show_all_pages_through_every_kind(app):  # noqa: F811
+async def test_kind_table_back_returns_to_general_table(app):  # noqa: F811
     await _add("Актара", "Инсектицид")
     await _add("Топаз", "Фунгицид")
 
     await app.say(BTN_MEDS)
-    await app.press("mg:all")
-    assert "Вся аптечка (2)" in app.tg.last_visible_text()
-    assert "Актара" in app.tg.last_visible_text()
-    assert "medpage:all:2" in app.tg.last_markup_callbacks()
-
-    await app.press("medpage:all:2")
+    await app.press(f"mg:{medicine_service.kind_token('Фунгицид')}")
     assert "Топаз" in app.tg.last_visible_text()
     assert "Актара" not in app.tg.last_visible_text()
 
     await app.press("medmenu")
-    assert "Выбери тип" in app.tg.last_visible_text()
+    assert "Вся аптечка (2)" in app.tg.last_visible_text()
+    assert "Актара" in app.tg.last_visible_text() and "Топаз" in app.tg.last_visible_text()
 
 
 async def test_delete_from_table_via_pick_screen(app):  # noqa: F811
@@ -216,7 +218,7 @@ async def test_delete_from_table_via_pick_screen(app):  # noqa: F811
     await app.press(f"meddelc:{medicine.id}")
 
     assert [m.name for m in await _medicines()] == ["Топаз"]
-    assert "Выбери тип" in app.tg.last_visible_text()  # вернулись в меню типов
+    assert "Вся аптечка (1)" in app.tg.last_visible_text()  # вернулись к общей таблице
 
 
 async def test_stale_kind_button_returns_to_menu(app):  # noqa: F811
