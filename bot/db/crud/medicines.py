@@ -49,6 +49,18 @@ async def list_medicines(session: AsyncSession, user_id: int) -> list[Medicine]:
     return list(result.scalars())
 
 
+async def list_all_medicines(session: AsyncSession) -> list[tuple[Medicine, User]]:
+    """Все препараты всех пользователей вместе с владельцами — для страницы
+    админки «Аптечка». Порядок как в list_medicines: сначала те, у кого срок
+    годности раньше; препараты без срока — в конце."""
+    result = await session.execute(
+        select(Medicine, User)
+        .join(User, User.id == Medicine.user_id)
+        .order_by(Medicine.expires_at.is_(None), Medicine.expires_at, Medicine.name)
+    )
+    return [(row[0], row[1]) for row in result.all()]
+
+
 async def delete_medicine(session: AsyncSession, medicine: Medicine) -> None:
     await session.delete(medicine)
     await session.flush()

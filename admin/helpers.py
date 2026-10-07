@@ -5,8 +5,8 @@ from fastapi.responses import RedirectResponse
 
 from admin.database import get_session
 from bot.db import crud
-from bot.db.models import Group, Plant, WateringZone
-from bot.services import watering_service
+from bot.db.models import Group, Medicine, Plant, WateringZone
+from bot.services import medicine_service, watering_service
 
 
 def group_anchor(group_id: int | None) -> str:
@@ -105,4 +105,43 @@ def zone_view(zone: WateringZone, now) -> dict:
         "next_text": watering_service.describe_due(zone.next_watering_at, now),
         "last_text": watering_service.describe_last_watered(zone.last_watered_at, now),
         "notify_text": watering_service.describe_notify_time(zone.notify_time),
+    }
+
+
+def medicine_redirect(user_id: int, msg: str | None = None, err: str | None = None) -> RedirectResponse:
+    """Возврат на страницу пользователя к блоку «Аптечка» с flash-сообщением
+    (якорь #medicines — после query-строки, как в zone_redirect)."""
+    query = {key: value for key, value in (("msg", msg), ("err", err)) if value is not None}
+    url = f"/users/{user_id}"
+    if query:
+        url += f"?{urlencode(query)}"
+    return RedirectResponse(f"{url}#medicines", status_code=303)
+
+
+def medicine_view(medicine: Medicine, today) -> dict:
+    """Всё, что нужно шаблону про один препарат. state:
+      expired  — срок вышел;
+      soon     — срок попадает в окно напоминания (30 дней);
+      ok       — срок в порядке;
+      no_date  — срок не указан.
+    Те же правила, что в боте (medicine_service.is_expired/is_expiring_soon)."""
+    if medicine.expires_at is None:
+        state = "no_date"
+    elif medicine_service.is_expired(medicine, today):
+        state = "expired"
+    elif medicine_service.is_expiring_soon(medicine, today):
+        state = "soon"
+    else:
+        state = "ok"
+    expires_text = None
+    remaining_text = None
+    if medicine.expires_at is not None:
+        expires_text = medicine_service.format_expiry(medicine.expires_at)
+        remaining_text = medicine_service.describe_remaining(medicine.expires_at, today)
+    return {
+        "medicine": medicine,
+        "state": state,
+        "expires_text": expires_text,
+        "remaining_text": remaining_text,
+        "reminded": medicine.notified_at is not None,
     }

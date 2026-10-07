@@ -25,11 +25,14 @@
     {% block top_bar %}
     <div class="top-bar">
       {% set path = request.url.path %}
-      {% if path.startswith('/ai-logs') or path.startswith('/watering') %}
+      {% if path.startswith('/ai-logs') or path.startswith('/watering') or path.startswith('/medicines') %}
         <a href="/" class="nav-link">Главное меню</a>
       {% endif %}
       {% if not path.startswith('/watering') %}
         <a href="/watering" class="nav-link">Полив</a>
+      {% endif %}
+      {% if not path.startswith('/medicines') %}
+        <a href="/medicines" class="nav-link">Аптечка</a>
       {% endif %}
       {% if not path.startswith('/ai-logs') %}
         <a href="/ai-logs" class="nav-link">Логи ИИ</a>

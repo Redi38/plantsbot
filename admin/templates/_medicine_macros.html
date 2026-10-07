@@ -1,0 +1,25 @@
+{% macro med_badge(state) %}
+  {% if state == "expired" %}
+    <span class="zone-badge zone-badge--expired">⛔ срок вышел</span>
+  {% elif state == "soon" %}
+    <span class="zone-badge zone-badge--soon">⚠️ скоро закончится</span>
+  {% elif state == "no_date" %}
+    <span class="zone-badge zone-badge--nodate">без срока</span>
+  {% else %}
+    <span class="zone-badge">🧪 в порядке</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro med_meta(m) %}
+  {% set med = m.medicine %}
+  <div class="zone-meta">
+    {% if med.active_substance %}<span>Вещество: {{ med.active_substance }}</span>{% endif %}
+    {% if m.expires_text %}
+      <span>Годен до: {{ m.expires_text }} ({{ m.remaining_text }})</span>
+    {% else %}
+      <span>Срок годности не указан</span>
+    {% endif %}
+    {% if med.comment %}<span>Комментарий: {{ med.comment }}</span>{% endif %}
+    {% if m.reminded %}<span>Напоминание отправлено: {{ med.notified_at.strftime("%d.%m.%Y %H:%M") }} UTC</span>{% endif %}
+  </div>
+{% endmacro %}

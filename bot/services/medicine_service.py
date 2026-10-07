@@ -154,6 +154,43 @@ async def add_medicine(
     return medicine
 
 
+async def edit_medicine(
+    session: AsyncSession,
+    medicine: Medicine,
+    name: str,
+    kind: str,
+    active_substance: str | None,
+    expires_at: date | None,
+    comment: str | None,
+) -> bool:
+    """Меняет все поля препарата разом (форма админки присылает их целиком).
+    Правила те же, что в add_medicine. Если срок годности поменялся,
+    сбрасываем notified_at: старое напоминание относилось к прежнему сроку,
+    и по новому оно должно прийти заново. Возвращает True, если что-то
+    реально изменилось."""
+    name, kind = name.strip(), kind.strip()
+    if not name or len(name) > MAX_NAME_LENGTH:
+        raise ValueError(f"name must be 1..{MAX_NAME_LENGTH} chars")
+    if not kind or len(kind) > MAX_KIND_LENGTH:
+        raise ValueError(f"kind must be 1..{MAX_KIND_LENGTH} chars")
+    active_substance = (active_substance or "").strip() or None
+    comment = (comment or "").strip() or None
+    if active_substance and len(active_substance) > MAX_SUBSTANCE_LENGTH:
+        raise ValueError(f"active_substance must be <= {MAX_SUBSTANCE_LENGTH} chars")
+    if comment and len(comment) > MAX_COMMENT_LENGTH:
+        raise ValueError(f"comment must be <= {MAX_COMMENT_LENGTH} chars")
+
+    new_values = (name, kind, active_substance, expires_at, comment)
+    old_values = (medicine.name, medicine.kind, medicine.active_substance, medicine.expires_at, medicine.comment)
+    if new_values == old_values:
+        return False
+    if expires_at != medicine.expires_at:
+        medicine.notified_at = None
+    medicine.name, medicine.kind, medicine.active_substance, medicine.expires_at, medicine.comment = new_values
+    await session.commit()
+    return True
+
+
 async def remove(session: AsyncSession, medicine: Medicine) -> None:
     await crud.delete_medicine(session, medicine)
     await session.commit()

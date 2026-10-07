@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_medicine_macros.html" import med_badge, med_meta %}
+{% block content %}
+  <a class="back" href="/">← Все пользователи</a>
+  <h1>🧪 Аптечка</h1>
+  <p class="muted">
+    Препараты всех пользователей: сначала те, у кого срок годности раньше.
+    Чтобы добавить, изменить или удалить препарат, открой пользователя.
+  </p>
+
+  <div class="card" id="medicines-filter-card">
+    <form class="ai-log-filter" method="get" action="/medicines">
+      <label class="field-label" for="medicines-filter-select">Показать:</label>
+      <select id="medicines-filter-select" name="status" onchange="this.form.submit()">
+        <option value="" {% if not status_filter %}selected{% endif %}>Все препараты ({{ total }})</option>
+        <option value="{{ filter_expired }}" {% if status_filter == filter_expired %}selected{% endif %}>Срок вышел ({{ expired_count }})</option>
+        <option value="{{ filter_soon }}" {% if status_filter == filter_soon %}selected{% endif %}>Скоро закончится ({{ soon_count }})</option>
+      </select>
+      <noscript><input type="submit" class="primary" value="Применить"></noscript>
+    </form>
+  </div>
+
+  {% if not items %}
+    <p class="empty">{% if status_filter %}Подходящих препаратов нет.{% else %}Пока нет ни одного препарата.{% endif %}</p>
+  {% else %}
+    <ul class="zones zones--flat">
+      {% for m in items %}
+        {% set med = m.medicine %}
+        <li class="zone">
+          <div class="zone-top">
+            <span class="zone-name">{{ med.name }}</span>
+            <span class="zone-badge">{{ med.kind }}</span>
+            {{ med_badge(m.state) }}
+          </div>
+          <div class="zone-owner">
+            <a href="/users/{{ m.user.id }}#medicines">{{ m.user.display_name }}</a>
+          </div>
+          {{ med_meta(m) }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endblock %}

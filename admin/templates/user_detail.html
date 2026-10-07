@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_zone_macros.html" import state_badge, zone_meta %}
+{% from "_medicine_macros.html" import med_badge, med_meta %}
 {% block content %}
   <a class="back" href="/">← Все пользователи</a>
   <h1>🌿 {{ user.display_name }}</h1>
@@ -235,6 +236,68 @@
       <input type="number" name="interval_days" value="7" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="Интервал в днях">
       <input type="time" name="notify_time" value="" aria-label="Время напоминания (UTC), необязательно">
       <input type="submit" class="primary" value="+ Добавить зону">
+    </form>
+  </div>
+
+  <div class="card" id="medicines">
+    <div class="card-header">
+      <h2>🧪 Аптечка</h2>
+      <a href="/medicines" class="muted">Все пользователи →</a>
+    </div>
+    <p class="muted hint">
+      Обязательны только название и тип. Срок годности — «05.2027» (годен до
+      конца месяца, как на упаковке) или полная дата «31.05.2027»; пусто —
+      без срока. За 30 дней до конца срока бот присылает одно напоминание;
+      при смене срока оно придёт заново.
+    </p>
+
+    {% if medicines %}
+      <ul class="zones">
+        {% for m in medicines %}
+          {% set med = m.medicine %}
+          <li class="zone">
+            <div class="zone-top">
+              <span class="zone-name">{{ med.name }}</span>
+              <span class="zone-badge">{{ med.kind }}</span>
+              {{ med_badge(m.state) }}
+            </div>
+            {{ med_meta(m) }}
+            <div class="zone-actions">
+              <details class="zone-edit">
+                <summary>Изменить</summary>
+                <form class="edit-form" method="post" action="/medicines/{{ med.id }}/update">
+                  <input type="hidden" name="user_id" value="{{ user.id }}">
+                  <input type="text" name="name" value="{{ med.name }}" maxlength="{{ med_max_name }}" required aria-label="Название">
+                  <input type="text" name="kind" value="{{ med.kind }}" maxlength="{{ med_max_kind }}" list="kind-presets" required aria-label="Тип">
+                  <input type="text" name="active_substance" value="{{ med.active_substance or '' }}" maxlength="{{ med_max_substance }}" placeholder="Действующее вещество" aria-label="Действующее вещество">
+                  <input type="text" name="expires_at" value="{{ format_expiry(med.expires_at) if med.expires_at else '' }}" placeholder="Срок: 05.2027" aria-label="Срок годности">
+                  <input type="text" name="comment" value="{{ med.comment or '' }}" maxlength="{{ med_max_comment }}" placeholder="Комментарий" aria-label="Комментарий">
+                  <input type="submit" class="primary" value="Сохранить">
+                </form>
+              </details>
+              <form class="inline" method="post" action="/medicines/{{ med.id }}/delete"
+                    data-confirm="Удалить препарат «{{ med.name }}»?">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <button type="submit" class="danger">Удалить</button>
+              </form>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">В аптечке пока пусто.</p>
+    {% endif %}
+
+    <datalist id="kind-presets">
+      {% for kind in kind_presets %}<option value="{{ kind }}">{% endfor %}
+    </datalist>
+    <form class="add-form" method="post" action="/users/{{ user.id }}/medicines">
+      <input type="text" name="name" placeholder="Название препарата" maxlength="{{ med_max_name }}" required>
+      <input type="text" name="kind" placeholder="Тип (Инсектицид, Удобрение…)" maxlength="{{ med_max_kind }}" list="kind-presets" required>
+      <input type="text" name="active_substance" placeholder="Вещество (необязательно)" maxlength="{{ med_max_substance }}">
+      <input type="text" name="expires_at" placeholder="Срок: 05.2027 (необязательно)">
+      <input type="text" name="comment" placeholder="Комментарий (необязательно)" maxlength="{{ med_max_comment }}">
+      <input type="submit" class="primary" value="+ Добавить препарат">
     </form>
   </div>
 

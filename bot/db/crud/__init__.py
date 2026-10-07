@@ -37,6 +37,7 @@ from .medicines import (
     create_medicine,
     delete_medicine,
     get_medicine,
+    list_all_medicines,
     list_due_medicines,
     list_medicines,
 )
@@ -98,6 +99,7 @@ __all__ = [
     "list_ai_log_actions",
     "list_ai_logs_all",
     "list_ai_logs_for_user",
+    "list_all_medicines",
     "list_all_zones",
     "list_due_medicines",
     "list_due_zones",

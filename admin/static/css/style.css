@@ -438,3 +438,9 @@ input[type=number] { width: 84px; }
 .zone-badge--sent { background: var(--ok-bg); color: var(--ok-text); }
 .zone-badge--queued { background: var(--unknown-bg); color: var(--unknown-text); }
 #watering-filter-card { padding: 10px 14px; }
+
+/* ---------- Аптечка ---------- */
+.zone-badge--expired { background: var(--danger-bg); color: var(--danger-text); }
+.zone-badge--soon { background: var(--unknown-bg); color: var(--unknown-text); }
+.zone-badge--nodate { background: var(--border); color: var(--muted); }
+#medicines-filter-card { padding: 10px 14px; }

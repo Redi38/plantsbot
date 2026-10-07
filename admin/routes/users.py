@@ -7,10 +7,10 @@ from fastapi.responses import StreamingResponse
 
 from admin.auth import require_auth
 from admin.database import get_session
-from admin.helpers import get_user_or_404, plant_count, redirect_with, user_redirect, zone_view
+from admin.helpers import get_user_or_404, medicine_view, plant_count, redirect_with, user_redirect, zone_view
 from admin.templating import templates
 from bot.db import crud
-from bot.services import import_service, plant_service, watering_service
+from bot.services import import_service, medicine_service, plant_service, watering_service
 
 router = APIRouter()
 
@@ -44,7 +44,9 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
         ungrouped_label = await plant_service.get_ungrouped_label(session, user.id)
         ai_logs = await crud.list_ai_logs_for_user(session, user.id, limit=30)
         zones = await crud.list_zones(session, user.id)
+        medicines = await crud.list_medicines(session, user.id)
     now = watering_service.utcnow()
+    today = medicine_service.today_utc()
     msg = request.query_params.get("msg")
     err = request.query_params.get("err")
     count = plant_count(groups, ungrouped)
@@ -62,6 +64,13 @@ async def user_detail(request: Request, user_id: int, _: str = Depends(require_a
             "min_interval": watering_service.MIN_INTERVAL_DAYS,
             "max_interval": watering_service.MAX_INTERVAL_DAYS,
             "max_name_length": watering_service.MAX_NAME_LENGTH,
+            "medicines": [medicine_view(medicine, today) for medicine in medicines],
+            "kind_presets": medicine_service.KIND_PRESETS,
+            "med_max_name": medicine_service.MAX_NAME_LENGTH,
+            "med_max_kind": medicine_service.MAX_KIND_LENGTH,
+            "med_max_substance": medicine_service.MAX_SUBSTANCE_LENGTH,
+            "med_max_comment": medicine_service.MAX_COMMENT_LENGTH,
+            "format_expiry": medicine_service.format_expiry,
             "msg": msg,
             "err": err,
         },

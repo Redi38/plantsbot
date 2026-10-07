@@ -126,6 +126,13 @@ groups (with the option to move or delete their plants), edit any plant's
 name, comment, or group, import/export CSV, set a caption for ungrouped
 plants, and read the AI agent's request log across all users at `/ai-logs`.
 
+The medicine cabinet has its own card on each user's page (`#medicines`): add a
+medicine (name and kind required; active substance, expiry and comment
+optional), edit any field, delete it. Expiry accepts `05.2027` (valid until the
+end of that month) or a full date `31.05.2027`; changing the expiry re-arms the
+30-day reminder. The `/medicines` page lists every user's medicines, earliest
+expiry first, with "expired" and "expiring soon" filters.
+
 Watering zones live in their own card on each user's page: add a zone,
 rename it, change the interval, mark it watered, snooze it or delete it. The
 `/watering` page lists every user's zones in one place (most urgent first,
@@ -187,7 +194,7 @@ bot/
 
 admin/                        # web admin panel (FastAPI + Jinja2), separate container
 ├── main.py                   # app assembly, route registration
-├── routes/                   # users, plants, groups, ai_logs, auth
+├── routes/                   # users, plants, groups, watering, medicines, ai_logs, auth
 ├── auth.py                   # login form + signed cookie session
 ├── database.py                # its own connection to the same DB (without bot.config)
 ├── helpers.py
