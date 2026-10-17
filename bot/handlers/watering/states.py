@@ -13,3 +13,4 @@ class ZoneEdit(StatesGroup):
     name = State()
     interval = State()
     notify_time = State()
+    next_date = State()

@@ -200,3 +200,44 @@ async def test_user_page_shows_medicines_card(client):
     assert 'id="medicines"' in page.text
     assert "Актара" in page.text
     assert "05.2099" in page.text
+
+
+# ---------- админка: дата следующего полива ----------
+
+
+async def _make_zone(client, uid: int):
+    async with client.sessionmaker() as session:
+        from bot.services import watering_service as wsvc
+
+        zone = await wsvc.add_zone(session, uid, "Балкон", 3)
+        zone.notified_at = zone.next_watering_at
+        await session.commit()
+        return zone.id
+
+
+async def test_admin_sets_next_watering_date_and_resets_reminder(client):
+    uid = await _make_user(client)
+    zid = await _make_zone(client, uid)
+    new_at = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=2)).replace(microsecond=0, second=0)
+
+    resp = client.post(f"/zones/{zid}/next-date", data={"user_id": uid, "next_at": new_at.strftime("%Y-%m-%dT%H:%M")})
+
+    assert resp.status_code == 303 and "err=" not in resp.headers["location"]
+    async with client.sessionmaker() as session:
+        zone = await crud.get_zone(session, zid, uid)
+    assert zone.next_watering_at == new_at
+    assert zone.notified_at is None
+
+
+async def test_admin_next_watering_date_rejects_garbage_and_far_future(client):
+    uid = await _make_user(client)
+    zid = await _make_zone(client, uid)
+    async with client.sessionmaker() as session:
+        before = (await crud.get_zone(session, zid, uid)).next_watering_at
+
+    bad = client.post(f"/zones/{zid}/next-date", data={"user_id": uid, "next_at": "когда-нибудь"})
+    far = client.post(f"/zones/{zid}/next-date", data={"user_id": uid, "next_at": "2099-01-01T09:00"})
+
+    assert "err=" in bad.headers["location"] and "err=" in far.headers["location"]
+    async with client.sessionmaker() as session:
+        assert (await crud.get_zone(session, zid, uid)).next_watering_at == before

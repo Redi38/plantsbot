@@ -404,6 +404,46 @@ async def test_change_notify_time_by_button_and_by_text(app):
     assert (await _zones())[0].notify_time is None
 
 
+async def test_change_next_date_by_button_and_by_text(app):
+    zone_id = await _create_zone(app, "Подоконник", 7)
+    today = ws.local_today(ws.utcnow())
+
+    await app.press(f"wzdate:{zone_id}")
+    assert "Когда поливать" in app.tg.last_visible_text()
+    assert f"wzedate:{zone_id}:2" in app.tg.last_markup_callbacks()
+
+    await app.press(f"wzedate:{zone_id}:2")
+    target = today + timedelta(days=2)
+    assert f"Следующий полив — {target.strftime('%d.%m.%Y')}" in app.tg.last_visible_text()
+    zone = (await _zones())[0]
+    assert ws.local_today(zone.next_watering_at) == target
+    assert zone.notified_at is None
+
+    await app.press(f"wzdate:{zone_id}")
+    typed = today + timedelta(days=5)
+    await app.say(typed.strftime("%d.%m.%Y"))
+    assert f"Следующий полив — {typed.strftime('%d.%m.%Y')}" in app.tg.last_visible_text()
+    zone = (await _zones())[0]
+    assert ws.local_today(zone.next_watering_at) == typed
+    assert zone.interval_days == 7 and zone.last_watered_at is None
+
+
+async def test_change_next_date_rejects_past_and_garbage_and_keeps_dialog(app):
+    zone_id = await _create_zone(app, "Подоконник", 7)
+    before = (await _zones())[0].next_watering_at
+
+    await app.press(f"wzdate:{zone_id}")
+    await app.say("завтра")
+    assert "Нужна дата" in app.tg.last_visible_text()
+    yesterday = ws.local_today(ws.utcnow()) - timedelta(days=1)
+    await app.say(yesterday.strftime("%d.%m.%Y"))
+    assert "Нужна дата" in app.tg.last_visible_text()
+    assert (await _zones())[0].next_watering_at == before
+
+    await app.say((ws.local_today(ws.utcnow()) + timedelta(days=1)).strftime("%d.%m"))
+    assert "Следующий полив —" in app.tg.last_visible_text()
+
+
 async def test_delete_asks_confirmation_then_removes(app):
     zone_id = await _create_zone(app)
 

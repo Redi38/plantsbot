@@ -9,6 +9,8 @@
   wzedit:{id}        — сменить интервал зоны
   wzeint:{id}:{days} — новый интервал существующей зоны
   wzrename:{id}      — сменить название зоны
+  wzdate:{id}        — сменить дату следующего полива
+  wzedate:{id}:{n}   — следующий полив через n дней от сегодня (n=0 — сегодня)
   wztedit:{id}                 — сменить время напоминания зоны
   wzetime:{id}:{HHMM} / wztskip:{id} — новое время зоны / убрать фикс. час (без кнопки, оставлен для колбэка)
   wzwater:{id}       — «полил» из карточки (после подтверждения)
@@ -18,7 +20,7 @@
   wzlate:{id}:{days} — «отложить» из напоминания
 """
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -26,6 +28,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db.models import WateringZone
 from bot.services.watering_service import (
     INTERVAL_PRESETS,
+    NEXT_DATE_PRESETS,
     NOTIFY_TIME_PRESETS,
     SNOOZE_OPTIONS,
     is_due,
@@ -50,9 +53,10 @@ def zone_card_keyboard(zone_id: int) -> InlineKeyboardMarkup:
     builder.button(text="✏️ Название", callback_data=f"wzrename:{zone_id}", style="primary")
     builder.button(text="⏱ Интервал", callback_data=f"wzedit:{zone_id}", style="primary")
     builder.button(text="🕒 Время", callback_data=f"wztedit:{zone_id}", style="primary")
+    builder.button(text="📅 Дата", callback_data=f"wzdate:{zone_id}", style="primary")
     builder.button(text="🗑 Удалить", callback_data=f"wzdel:{zone_id}", style="danger")
     builder.button(text="⬅️ Назад", callback_data="wzmenu", style="primary")
-    builder.adjust(1, 3, 1, 1)
+    builder.adjust(1, 2, 2, 1, 1)
     return builder.as_markup()
 
 
@@ -66,6 +70,21 @@ def interval_keyboard(
         builder.button(text=f"{days} дн.", callback_data=f"{prefix}:{days}", style="primary")
     builder.button(text=back_label, callback_data=back_data, style=back_style)
     builder.adjust(3, 3, 3, 1)
+    return builder.as_markup()
+
+
+def next_date_keyboard(
+    prefix: str, back_data: str, today: date, *, back_label: str = "❌ Отмена", back_style: str = "danger"
+) -> InlineKeyboardMarkup:
+    """Быстрый выбор даты следующего полива. Callback каждой кнопки —
+    f"{prefix}:{дней_от_сегодня}"; today — локальная дата пользователя."""
+    builder = InlineKeyboardBuilder()
+    for offset in NEXT_DATE_PRESETS:
+        day = today + timedelta(days=offset)
+        label = {0: "Сегодня", 1: "Завтра"}.get(offset, day.strftime("%d.%m"))
+        builder.button(text=label, callback_data=f"{prefix}:{offset}", style="primary")
+    builder.button(text=back_label, callback_data=back_data, style=back_style)
+    builder.adjust(3, 3, 1)
     return builder.as_markup()
 
 

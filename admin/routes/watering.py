@@ -1,4 +1,4 @@
-from datetime import time
+from datetime import datetime, time
 
 from fastapi import APIRouter, Depends, Form
 from fastapi.requests import Request
@@ -151,6 +151,32 @@ async def zone_snooze(
             return zone_redirect(user_id, err="Зона не найдена")
         await ws.snooze(session, zone, days)
     return zone_redirect(user_id, msg=f"Полив зоны «{zone.name}» отложен на {days} дн.")
+
+
+@router.post("/zones/{zone_id}/next-date")
+async def zone_set_next_date(
+    zone_id: int,
+    user_id: int = Form(...),
+    next_at: str = Form(...),
+    _: str = Depends(require_auth),
+):
+    """Ставит дату следующего полива вручную (UTC, как и всё в админке).
+    Пригодится, когда пользователь полил, но забыл отметить: «Полил» сдвинул
+    бы срок вперёд, а здесь цикл остаётся прежним. Дата в прошлом допустима —
+    зона сразу станет «пора поливать»."""
+    try:
+        when = datetime.fromisoformat(next_at)
+    except ValueError:
+        return zone_redirect(user_id, err="Неверная дата")
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+        if zone is None:
+            return zone_redirect(user_id, err="Зона не найдена")
+        try:
+            await ws.set_next_watering(session, zone, when)
+        except ValueError:
+            return zone_redirect(user_id, err=f"Дата не дальше чем через {ws.MAX_INTERVAL_DAYS} дн.")
+    return zone_redirect(user_id, msg=f"Следующий полив зоны «{zone.name}» — {when.strftime('%d.%m.%Y %H:%M')} UTC")
 
 
 @router.post("/zones/{zone_id}/delete")

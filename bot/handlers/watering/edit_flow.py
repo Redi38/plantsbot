@@ -1,9 +1,9 @@
 """Сценарии изменения существующей зоны (FSM ZoneEdit): переименование,
-смена интервала, смена времени напоминания. Три независимых входа
-(wzrename/wzedit/wztedit), объединённые общим состоянием, потому что ни
+смена интервала, смена времени напоминания, смена даты следующего полива.
+Четыре независимых входа (wzrename/wzedit/wztedit/wzdate), объединённые общим состоянием, потому что ни
 один из них не пересекается с другими по экрану."""
 
-from datetime import time
+from datetime import date, time, timedelta
 from html import escape
 
 from aiogram import F
@@ -15,7 +15,7 @@ from bot.db import crud
 from bot.db.database import get_session
 from bot.keyboards.inline import cancel_keyboard
 from bot.keyboards.reply import MENU_BUTTONS
-from bot.keyboards.watering import interval_keyboard, notify_time_keyboard
+from bot.keyboards.watering import interval_keyboard, next_date_keyboard, notify_time_keyboard
 from bot.services import watering_service
 from bot.services.watering_service import MAX_INTERVAL_DAYS, MAX_NAME_LENGTH, MIN_INTERVAL_DAYS
 from bot.utils.chat import delete_user_message, pop_tracked, render, safe_delete_message, safe_edit_text, track_callback
@@ -266,6 +266,102 @@ async def zone_edit_notify_time_text(message: Message, state: FSMContext, user_i
         await message.answer(NOT_FOUND)
         return
     view = await card_view(user_id, zone_id, notice=f"✅ Теперь напоминаю {watering_service.describe_notify_time(notify_time)}.")
+    if view is None:
+        await message.answer(NOT_FOUND)
+        return
+    text, kb = view
+    await message.answer(text, reply_markup=kb)
+
+
+# ---------- Смена даты следующего полива ----------
+
+
+def _date_keyboard(zone_id: int):
+    return next_date_keyboard(
+        f"wzedate:{zone_id}",
+        f"wz:{zone_id}",
+        watering_service.local_today(watering_service.utcnow()),
+        back_label="⬅️ Назад",
+        back_style="primary",
+    )
+
+
+@router.callback_query(F.data.startswith("wzdate:"))
+async def zone_edit_date_start(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    zone_id = int(callback.data.split(":", 1)[1])
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+    if zone is None:
+        await callback.answer("Зона уже удалена", show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    await state.update_data(zone_id=zone_id)
+    await state.set_state(ZoneEdit.next_date)
+    await callback.message.edit_text(
+        f"📅 Когда поливать зону «{escape(zone.name)}» в следующий раз?\n\n"
+        f"Сейчас — {watering_service.describe_next_date(zone, watering_service.utcnow())}.\n"
+        "Выбери кнопкой или напиши дату в чат, например: 20.10. "
+        "Дальше напоминания пойдут по обычному интервалу от этой даты.",
+        reply_markup=_date_keyboard(zone_id),
+    )
+    await track_callback(callback, state)
+
+
+async def _apply_next_date(user_id: int, zone_id: int, local_date: date) -> bool:
+    async with get_session() as session:
+        zone = await crud.get_zone(session, zone_id, user_id)
+        if zone is None:
+            return False
+        await watering_service.set_next_watering(
+            session, zone, watering_service.next_watering_for_date(zone, local_date)
+        )
+    return True
+
+
+def _date_notice(local_date: date) -> str:
+    return f"✅ Следующий полив — {local_date.strftime('%d.%m.%Y')}."
+
+
+@router.callback_query(F.data.startswith("wzedate:"))
+async def zone_edit_date_button(callback: CallbackQuery, state: FSMContext, user_id: int) -> None:
+    _, zone_id, offset = callback.data.split(":")
+    await callback.answer()
+    await leave_zone_dialog(state)
+    local_date = watering_service.local_today(watering_service.utcnow()) + timedelta(days=int(offset))
+    if not await _apply_next_date(user_id, int(zone_id), local_date):
+        await safe_edit_text(callback.message, NOT_FOUND)
+        return
+    await edit_to_card(callback.message, user_id, int(zone_id), notice=_date_notice(local_date))
+
+
+@router.message(StateFilter(ZoneEdit.next_date), F.text, ~F.text.in_(MENU_BUTTONS))
+async def zone_edit_date_text(message: Message, state: FSMContext, user_id: int) -> None:
+    await delete_user_message(message)
+    data = await state.get_data()
+    zone_id = data["zone_id"]
+
+    now = watering_service.utcnow()
+    local_date = watering_service.parse_date(message.text, now)
+    if local_date is None or not watering_service.date_in_range(local_date, now):
+        await render(
+            message,
+            state,
+            f"⚠️ Нужна дата от сегодня до {watering_service.MAX_INTERVAL_DAYS} дн. вперёд "
+            "в формате ДД.ММ или ДД.ММ.ГГГГ, например: 20.10",
+            reply_markup=_date_keyboard(zone_id),
+        )
+        return
+
+    tracked_id = await pop_tracked(state)
+    await state.clear()
+    if tracked_id:
+        await safe_delete_message(message.bot, message.chat.id, tracked_id)
+
+    if not await _apply_next_date(user_id, zone_id, local_date):
+        await message.answer(NOT_FOUND)
+        return
+    view = await card_view(user_id, zone_id, notice=_date_notice(local_date))
     if view is None:
         await message.answer(NOT_FOUND)
         return

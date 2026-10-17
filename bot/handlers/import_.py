@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
@@ -102,7 +102,7 @@ async def export_plants(callback: CallbackQuery, state: FSMContext, user_id: int
 
     file = BufferedInputFile(
         csv_text.encode("utf-8-sig"),
-        filename=f"plants_{datetime.now(UTC):%Y-%m-%d}.csv",
+        filename=f"plants_{datetime.now(timezone.utc):%Y-%m-%d}.csv",
     )
     await callback.answer()
     await state.clear()

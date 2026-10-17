@@ -61,6 +61,28 @@ async def test_does_not_repeat_reminder_on_next_pass(session, user_id, bot):
     assert bot.send_message.await_count == 1
 
 
+async def test_repeats_reminder_next_day_if_not_watered(session, user_id, bot):
+    await ws.add_zone(session, user_id, "Подоконник", 3, now=NOW)
+    due = NOW + timedelta(days=3)
+
+    assert await send_due_reminders(bot, session, now=due) == 1
+    assert await send_due_reminders(bot, session, now=due + timedelta(hours=23)) == 0
+    assert await send_due_reminders(bot, session, now=due + timedelta(days=1)) == 1
+    assert await send_due_reminders(bot, session, now=due + timedelta(days=1, minutes=1)) == 0
+    assert await send_due_reminders(bot, session, now=due + timedelta(days=2)) == 1
+    assert bot.send_message.await_count == 3
+
+
+async def test_stops_repeating_after_watering(session, user_id, bot):
+    zone = await ws.add_zone(session, user_id, "Подоконник", 3, now=NOW)
+    due = NOW + timedelta(days=3)
+    await send_due_reminders(bot, session, now=due)
+
+    await ws.mark_watered(session, zone, now=due + timedelta(hours=1))
+
+    assert await send_due_reminders(bot, session, now=due + timedelta(days=1)) == 0
+
+
 async def test_reminds_again_when_snooze_expires(session, user_id, bot):
     zone = await ws.add_zone(session, user_id, "Подоконник", 3, now=NOW)
     due = NOW + timedelta(days=3)

@@ -1,4 +1,4 @@
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 import pytest
 
@@ -294,13 +294,22 @@ async def test_list_due_zones_returns_only_ripe_ones_with_owner_telegram_id(sess
     assert [(z.id, tg) for z, tg in due] == [(ripe.id, 123456789)]
 
 
-async def test_list_due_zones_skips_already_notified_zone(session, user_id):
+async def test_list_due_zones_skips_zone_notified_less_than_a_day_ago(session, user_id):
     zone = await ws.add_zone(session, user_id, "Балкон", 3, now=NOW)
     check_time = NOW + timedelta(days=3)
     zone.notified_at = check_time
     await session.commit()
 
-    assert await crud.list_due_zones(session, check_time + timedelta(days=1)) == []
+    assert await crud.list_due_zones(session, check_time + timedelta(hours=23, minutes=59)) == []
+
+
+async def test_list_due_zones_repeats_every_day_while_not_watered(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 3, now=NOW)
+    check_time = NOW + timedelta(days=3)
+    zone.notified_at = check_time
+    await session.commit()
+
+    assert len(await crud.list_due_zones(session, check_time + timedelta(days=1))) == 1
 
 
 async def test_list_due_zones_notifies_again_after_snooze_expires(session, user_id):
@@ -322,3 +331,80 @@ async def test_list_due_zones_after_watering_waits_for_next_cycle(session, user_
 
     assert await crud.list_due_zones(session, due_time + timedelta(days=2)) == []
     assert len(await crud.list_due_zones(session, due_time + timedelta(days=3))) == 1
+
+
+# ---------- ручная дата следующего полива ----------
+
+# 2026-09-01 12:00 UTC = 15:00 в Минске, локальная дата та же.
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("20.10", date(2026, 10, 20)),
+        (" 5.9 ", date(2026, 9, 5)),
+        ("20.10.2026", date(2026, 10, 20)),
+        ("20/10/26", date(2026, 10, 20)),
+        ("20-10", date(2026, 10, 20)),
+    ],
+)
+def test_parse_date_accepts_common_formats(text, expected):
+    assert ws.parse_date(text, NOW) == expected
+
+
+@pytest.mark.parametrize("text", ["", "завтра", "31.02", "32.01", "20", "20.13", "2026-10-20"])
+def test_parse_date_rejects_garbage(text):
+    assert ws.parse_date(text, NOW) is None
+
+
+def test_date_in_range_is_from_local_today_to_a_year_ahead():
+    today = ws.local_today(NOW)
+    assert ws.date_in_range(today, NOW)
+    assert ws.date_in_range(today + timedelta(days=365), NOW)
+    assert not ws.date_in_range(today - timedelta(days=1), NOW)
+    assert not ws.date_in_range(today + timedelta(days=366), NOW)
+
+
+def test_local_today_uses_minsk_offset_near_midnight():
+    assert ws.local_today(datetime(2026, 9, 1, 21, 30)) == date(2026, 9, 2)
+
+
+async def test_next_watering_for_date_uses_fixed_notify_time(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 3, notify_time=time(6, 0), now=NOW)  # 09:00 Минск
+
+    assert ws.next_watering_for_date(zone, date(2026, 9, 10)) == datetime(2026, 9, 10, 6, 0)
+
+
+async def test_next_watering_for_date_keeps_time_of_day_without_notify_time(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 3, now=NOW)  # 12:00 UTC
+
+    assert ws.next_watering_for_date(zone, date(2026, 9, 10)) == datetime(2026, 9, 10, 12, 0)
+
+
+async def test_set_next_watering_moves_date_and_resets_reminder_but_keeps_last_watering(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 3, now=NOW)
+    await ws.mark_watered(session, zone, now=NOW)
+    zone.notified_at = NOW + timedelta(days=3)
+    new_date = NOW + timedelta(days=2)
+
+    await ws.set_next_watering(session, zone, new_date, now=NOW)
+
+    assert zone.next_watering_at == new_date
+    assert zone.notified_at is None
+    assert zone.last_watered_at == NOW
+    assert zone.interval_days == 3
+
+
+async def test_set_next_watering_rejects_date_too_far_ahead(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 3, now=NOW)
+
+    with pytest.raises(ValueError):
+        await ws.set_next_watering(session, zone, NOW + timedelta(days=366), now=NOW)
+
+
+async def test_after_manual_date_reminds_on_that_date_and_cycle_continues_after_watering(session, user_id):
+    zone = await ws.add_zone(session, user_id, "Балкон", 3, now=NOW)
+    await ws.set_next_watering(session, zone, NOW + timedelta(days=1), now=NOW)
+
+    assert await crud.list_due_zones(session, NOW + timedelta(hours=23)) == []
+    assert len(await crud.list_due_zones(session, NOW + timedelta(days=1))) == 1

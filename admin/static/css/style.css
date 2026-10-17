@@ -203,8 +203,9 @@ input[type=text] { flex: 1 1 120px; min-width: 90px; }
 .edit-form input[name="name"] { flex: 2 1 220px; }
 .edit-form input[name="comment"] { flex: 1 1 90px; min-width: 70px; }
 
-/* ---------- Настройка времени напоминания (UTC) ---------- */
-input[type=time] {
+/* ---------- Время и дата напоминания (UTC) ---------- */
+input[type=time],
+input[type=datetime-local] {
   font: inherit;
   padding: 5px 8px;
   border: 1px solid var(--border);
@@ -214,26 +215,33 @@ input[type=time] {
   min-width: 0;
   max-width: 100%;
   flex: 0 1 108px;
+  color-scheme: light dark;
   accent-color: var(--green);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-input[type=time]:hover { border-color: var(--green); }
-input[type=time]:focus {
+input[type=time]:hover,
+input[type=datetime-local]:hover { border-color: var(--green); }
+input[type=time]:focus,
+input[type=datetime-local]:focus {
   outline: none;
   border-color: var(--green);
   box-shadow: 0 0 0 2px var(--green-light);
 }
 /* Иконка часов в Chrome/Edge/Safari — подстраиваем под тёмную/светлую тему. */
-input[type=time]::-webkit-calendar-picker-indicator {
+input[type=time]::-webkit-calendar-picker-indicator,
+input[type=datetime-local]::-webkit-calendar-picker-indicator {
   cursor: pointer;
   border-radius: 4px;
   padding: 2px;
   filter: var(--time-icon-filter, none);
 }
-input[type=time]::-webkit-calendar-picker-indicator:hover { background: var(--green-light); }
+input[type=time]::-webkit-calendar-picker-indicator:hover,
+input[type=datetime-local]::-webkit-calendar-picker-indicator:hover { background: var(--green-light); }
 @media (prefers-color-scheme: dark) {
-  input[type=time] { --time-icon-filter: invert(1) brightness(1.4); }
+  input[type=time],
+  input[type=datetime-local] { --time-icon-filter: invert(1) brightness(1.4); }
 }
+input[type=datetime-local] { flex: 0 1 190px; }
 details > summary { cursor: pointer; font-size: 14px; font-weight: 500; color: var(--green); list-style: none; }
 details > summary::-webkit-details-marker { display: none; }
 .edit-form {

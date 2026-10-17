@@ -6,7 +6,7 @@
 Время везде — наивный UTC, как в остальных таблицах проекта."""
 
 import re
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from html import escape
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,9 +28,12 @@ DISPLAY_UTC_OFFSET = timedelta(hours=3)
 DISPLAY_TZ_LABEL = "Минск, UTC+3"
 # На сколько дней можно отложить полив из напоминания.
 SNOOZE_OPTIONS = (1, 2, 3)
+# Кнопки быстрого выбора даты следующего полива: через сколько дней от сегодня.
+NEXT_DATE_PRESETS = (0, 1, 2, 3, 5, 7)
 
 _INTERVAL_RE = re.compile(r"(\d{1,4})\s*(?:д\w*|d\w*)?\.?")
 _TIME_RE = re.compile(r"([01]?\d|2[0-3])[:.\s]([0-5]\d)")
+_DATE_RE = re.compile(r"(\d{1,2})[./-](\d{1,2})(?:[./-](\d{4}|\d{2}))?")
 
 
 class ZoneAlreadyExists(Exception):
@@ -67,6 +70,42 @@ def parse_notify_time(text: str) -> time | None:
     if not match:
         return None
     return time(int(match.group(1)), int(match.group(2)))
+
+
+def local_today(now: datetime) -> date:
+    """Сегодняшняя дата у пользователя (Минск, UTC+3), а не по UTC."""
+    return (now + DISPLAY_UTC_OFFSET).date()
+
+
+def parse_date(text: str, now: datetime) -> date | None:
+    """Достаёт дату из ввода: «20.10», «20.10.2026», «20/10/26». Без года —
+    берём текущий (локальный). Возвращает None, если это не дата."""
+    match = _DATE_RE.fullmatch(text.strip())
+    if not match:
+        return None
+    day, month, year = int(match.group(1)), int(match.group(2)), match.group(3)
+    year_num = local_today(now).year if year is None else int(year) + (2000 if len(year) == 2 else 0)
+    try:
+        return date(year_num, month, day)
+    except ValueError:
+        return None
+
+
+def date_in_range(local_date: date, now: datetime) -> bool:
+    """Дата следующего полива — от сегодня и не дальше MAX_INTERVAL_DAYS."""
+    today = local_today(now)
+    return today <= local_date <= today + timedelta(days=MAX_INTERVAL_DAYS)
+
+
+def next_watering_for_date(zone: WateringZone, local_date: date) -> datetime:
+    """Момент напоминания (наивный UTC) для выбранной пользователем локальной
+    даты. Время суток — фиксированное notify_time зоны, а если его нет, то
+    прежнее время суток следующего полива."""
+    if zone.notify_time is not None:
+        local_time = to_display_time(zone.notify_time)
+    else:
+        local_time = (zone.next_watering_at + DISPLAY_UTC_OFFSET).time()
+    return datetime.combine(local_date, local_time) - DISPLAY_UTC_OFFSET
 
 
 def _schedule(now: datetime, days: int, notify_time: time | None) -> datetime:
@@ -126,6 +165,22 @@ async def snooze(session: AsyncSession, zone: WateringZone, days: int, now: date
     _check_interval(days)
     now = now or utcnow()
     zone.next_watering_at = _schedule(now, days, zone.notify_time)
+    await session.commit()
+
+
+async def set_next_watering(
+    session: AsyncSession, zone: WateringZone, when: datetime, now: datetime | None = None
+) -> None:
+    """Вручную задаёт дату следующего полива (наивный UTC). Нужно, когда
+    пользователь полил, но забыл отметить, — «Полил» сейчас сдвинул бы срок
+    вперёд, а тут цикл остаётся как есть. notified_at сбрасываем: напоминание
+    относится к новому сроку. Дата в прошлом допустима — зона сразу станет
+    «пора поливать» (так делает админка); бот такие даты не предлагает."""
+    now = now or utcnow()
+    if when - now > timedelta(days=MAX_INTERVAL_DAYS):
+        raise ValueError(f"next watering must be within {MAX_INTERVAL_DAYS} days")
+    zone.next_watering_at = when
+    zone.notified_at = None
     await session.commit()
 
 
@@ -255,6 +310,12 @@ def render_card(zone: WateringZone, now: datetime) -> str:
         f"Следующий полив: {describe_due(zone.next_watering_at, now)}\n"
         f"Последний полив: {describe_last_watered(zone.last_watered_at, now)}"
     )
+
+
+def describe_next_date(zone: WateringZone, now: datetime) -> str:
+    """«через 2 дн. (20.10.2026)» — для экрана выбора даты, где без числа не обойтись."""
+    local = (zone.next_watering_at + DISPLAY_UTC_OFFSET).strftime("%d.%m.%Y")
+    return f"{describe_due(zone.next_watering_at, now)} ({local})"
 
 
 def render_reminder(zone: WateringZone) -> str:

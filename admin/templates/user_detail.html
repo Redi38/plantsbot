@@ -203,6 +203,11 @@
                 <input type="number" name="days" value="1" min="{{ min_interval }}" max="{{ max_interval }}" required aria-label="На сколько дней отложить">
                 <button type="submit">Отложить (дн.)</button>
               </form>
+              <form class="inline zone-snooze" method="post" action="/zones/{{ zone.id }}/next-date">
+                <input type="hidden" name="user_id" value="{{ user.id }}">
+                <input type="datetime-local" name="next_at" value="{{ zone.next_watering_at.strftime('%Y-%m-%dT%H:%M') }}" required aria-label="Дата следующего полива (UTC)">
+                <button type="submit">Сменить дату (UTC)</button>
+              </form>
               <details class="zone-edit">
                 <summary>Изменить</summary>
                 <form class="edit-form" method="post" action="/zones/{{ zone.id }}/update">

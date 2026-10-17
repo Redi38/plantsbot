@@ -1,9 +1,12 @@
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.db.models import User, WateringZone
+
+# Как часто повторять напоминание, пока зону так и не полили.
+REMINDER_REPEAT_INTERVAL = timedelta(days=1)
 
 
 async def create_zone(
@@ -64,16 +67,24 @@ async def list_due_zones(session: AsyncSession, now: datetime) -> list[tuple[Wat
     """Зоны по всем пользователям, про которые пора напомнить, вместе с
     telegram_id владельца (куда слать сообщение).
 
-    Условие: срок наступил и по этому циклу напоминание ещё не отправляли
-    (notified_at пуст либо старше срока — последнее случается после
-    «отложить»: срок сдвинулся вперёд, а notified_at остался от прошлого
-    напоминания)."""
+    Условие: срок наступил и выполняется любое из трёх:
+    - напоминание по этому циклу ещё не отправляли (notified_at пуст);
+    - notified_at старше срока — случается после «отложить»: срок сдвинулся
+      вперёд, а notified_at остался от прошлого напоминания;
+    - зону так и не полили, а последнее напоминание было не меньше
+      REMINDER_REPEAT_INTERVAL назад — шлём повторное (раз в сутки), пока
+      пользователь не нажмёт «Полил» или «Отложить»."""
+    repeat_cutoff = now - REMINDER_REPEAT_INTERVAL
     result = await session.execute(
         select(WateringZone, User.telegram_id)
         .join(User, User.id == WateringZone.user_id)
         .where(
             WateringZone.next_watering_at <= now,
-            or_(WateringZone.notified_at.is_(None), WateringZone.notified_at < WateringZone.next_watering_at),
+            or_(
+                WateringZone.notified_at.is_(None),
+                WateringZone.notified_at < WateringZone.next_watering_at,
+                WateringZone.notified_at <= repeat_cutoff,
+            ),
         )
         .order_by(WateringZone.next_watering_at)
     )

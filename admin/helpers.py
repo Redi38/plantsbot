@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 
 from admin.database import get_session
 from bot.db import crud
+from bot.db.crud.watering import REMINDER_REPEAT_INTERVAL
 from bot.db.models import Group, Medicine, Plant, WateringZone
 from bot.services import medicine_service, watering_service
 
@@ -86,13 +87,18 @@ def zone_view(zone: WateringZone, now) -> dict:
 
     state:
       waiting — срок ещё не наступил;
-      sent    — срок наступил, напоминание по этому циклу уже отправлено;
-      queued  — срок наступил, а напоминания ещё не было (бот выключен или
-                Telegram временно отвечал ошибкой — планировщик повторит
-                на ближайшей минутной проверке).
+      sent    — срок наступил, напоминание отправлено меньше суток назад;
+      queued  — срок наступил, а напоминания ещё не было или оно было больше
+                суток назад и зону так и не полили (бот выключен, Telegram
+                временно отвечал ошибкой, либо пора слать повторное —
+                планировщик отправит на ближайшей минутной проверке).
     Та же логика, что в crud.list_due_zones, только для отображения."""
     due = watering_service.is_due(zone, now)
-    reminded = zone.notified_at is not None and zone.notified_at >= zone.next_watering_at
+    reminded = (
+        zone.notified_at is not None
+        and zone.notified_at >= zone.next_watering_at
+        and zone.notified_at > now - REMINDER_REPEAT_INTERVAL
+    )
     if not due:
         state = "waiting"
     elif reminded:
